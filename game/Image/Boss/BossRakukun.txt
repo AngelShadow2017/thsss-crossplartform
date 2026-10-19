@@ -1,0 +1,12 @@
+BossRakukun-00	0	0	90	82	-9	0
+BossRakukun-01	90	0	90	82	-9	0
+BossRakukun-02	180	0	90	82	-9	0
+BossRakukun-03	270	0	90	82	-9	0
+BossRakukun-10	0	82	90	82	-9	0
+BossRakukun-11	90	82	90	82	-9	0
+BossRakukun-12	180	82	90	82	-9	0
+BossRakukun-13	270	82	90	82	-9	0
+BossRakukun-20	0	164	90	82	-9	0
+BossRakukun-21	90	164	90	82	-9	0
+BossRakukun-22	180	164	90	82	-9	0
+BossRakukun-23	270	164	90	82	-9	0

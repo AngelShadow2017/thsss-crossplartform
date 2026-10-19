@@ -1,0 +1,48 @@
+using System;
+using System.Collections.Generic;
+using Silk.NET.OpenGL;
+
+namespace SlimDX.Direct3D9;
+
+public partial class Device
+{
+    private readonly Dictionary<(int, SamplerState), int> _samplerStates = new();
+    private uint _sampler0;
+
+    private void StoreSamplerState(int sampler, SamplerState state, int value)
+    {
+        if (sampler < 0 || sampler > 15) throw new ArgumentOutOfRangeException(nameof(sampler));
+        _samplerStates[(sampler,state)] = value;
+    }
+    internal void ApplySamplerState()
+    {
+        if (_sampler0 == 0) _sampler0 = GL.GenSampler();
+        int State(SamplerState state,int fallback) => _samplerStates.TryGetValue((0,state),out int value) ? value : fallback;
+        int Address(int value) => value switch
+        {
+            (int)TextureAddress.Mirror => (int)GLEnum.MirroredRepeat,
+            (int)TextureAddress.Clamp => (int)GLEnum.ClampToEdge,
+            (int)TextureAddress.Border => (int)GLEnum.ClampToBorder,
+            _ => (int)GLEnum.Repeat,
+        };
+        GL.SamplerParameter(_sampler0,SamplerParameterI.TextureWrapS,Address(State(SamplerState.AddressU,(int)TextureAddress.Wrap)));
+        GL.SamplerParameter(_sampler0,SamplerParameterI.TextureWrapT,Address(State(SamplerState.AddressV,(int)TextureAddress.Wrap)));
+        bool point = State(SamplerState.MinFilter,(int)TextureFilter.Point) == (int)TextureFilter.Point;
+        int mip = State(SamplerState.MipFilter,(int)TextureFilter.None);
+        var minFilter = mip switch
+        {
+            (int)TextureFilter.Point => point ? GLEnum.NearestMipmapNearest : GLEnum.LinearMipmapNearest,
+            (int)TextureFilter.Linear => point ? GLEnum.NearestMipmapLinear : GLEnum.LinearMipmapLinear,
+            _ => point ? GLEnum.Nearest : GLEnum.Linear,
+        };
+        GL.SamplerParameter(_sampler0,SamplerParameterI.TextureMinFilter,(int)minFilter);
+        GL.SamplerParameter(_sampler0,SamplerParameterF.TextureMinLod,(float)State(SamplerState.MaxMipLevel,0));
+        GL.SamplerParameter(_sampler0,SamplerParameterF.TextureLodBias,BitConverter.Int32BitsToSingle(State(SamplerState.MipMapLodBias,0)));
+        GL.SamplerParameter(_sampler0,SamplerParameterI.TextureMagFilter,
+            State(SamplerState.MagFilter,(int)TextureFilter.Point) == (int)TextureFilter.Point ? (int)GLEnum.Nearest : (int)GLEnum.Linear);
+        int packed = State(SamplerState.BorderColor,0);
+        GL.SamplerParameter(_sampler0,SamplerParameterF.TextureBorderColor,new float[]{
+            ((packed>>16)&255)/255f,((packed>>8)&255)/255f,(packed&255)/255f,((packed>>24)&255)/255f});
+        GL.BindSampler(0,_sampler0);
+    }
+}

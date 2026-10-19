@@ -1,0 +1,12 @@
+BossKoreirei-00	0	0	64	80	0	0
+BossKoreirei-01	64	0	64	80	0	0
+BossKoreirei-02	128	0	64	80	0	0
+BossKoreirei-03	192	0	64	80	0	0
+BossKoreirei-10	0	80	64	80	0	0
+BossKoreirei-11	64	80	64	80	0	0
+BossKoreirei-12	128	80	64	80	0	0
+BossKoreirei-13	192	80	64	80	0	0
+BossKoreirei-20	0	160	64	80	0	0
+BossKoreirei-21	64	160	64	80	0	0
+BossKoreirei-22	128	160	64	80	0	0
+BossKoreirei-23	192	160	64	80	0	0

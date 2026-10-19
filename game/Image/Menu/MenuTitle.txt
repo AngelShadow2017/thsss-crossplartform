@@ -1,0 +1,3 @@
+MenuTitle_WeaponSelect	0	132	256	64	0	0
+MenuTitle_NameRegist	0	388	256	64	0	0
+MenuTitle_SaveReplay	256	4	256	64	0	0

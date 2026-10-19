@@ -1,0 +1,15 @@
+MyBullet0001	0	0	32	32	0	0
+MyBullet0002	32	0	32	32	0	0
+MyBullet0003	64	0	32	32	0	0
+MyBullet0004	96	0	32	32	0	0
+MyBullet0005	0	32	32	32	0	0
+MyBullet0006	32	32	32	32	0	0
+MyBullet0007	64	32	32	32	0	0
+MyBullet0008	96	32	32	32	0	0
+SevenLuminaries0	0	64	28	32	0	0
+SevenLuminaries1	28	64	28	32	0	0
+SevenLuminaries2	56	64	28	32	0	0
+SevenLuminaries3	84	64	28	32	0	0
+SevenLuminaries4	0	96	28	32	0	0
+SevenLuminaries5	28	96	28	32	0	0
+SevenLuminaries6	56	96	28	32	0	0

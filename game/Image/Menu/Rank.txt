@@ -1,0 +1,10 @@
+Menu_Easy	0	0	384	116	0	0
+Menu_Normal	0	197	384	116	0	0
+Menu_Hard	0	397	384	116	0	0
+Menu_Lunatic	0	579	384	116	0	0
+Menu_Extra	0	797	384	116	0	0
+Dark_Easy	442	0	384	116	0	0
+Dark_Normal	442	197	384	116	0	0
+Dark_Hard	442	394	384	116	0	0
+Dark_Lunatic	442	591	384	116	0	0
+Dark_Extra	442	788	384	116	0	0

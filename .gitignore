@@ -1,0 +1,11 @@
+# Reproducible build and publish output
+**/bin/
+**/obj/
+/artifacts/
+
+# Tool caches and per-process locks
+**/.ruff_cache/
+**/.thsss.lock
+
+# Distribution packages built by tools/make-dist.pl
+/dist/

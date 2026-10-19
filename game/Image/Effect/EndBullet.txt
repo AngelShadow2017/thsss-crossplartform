@@ -1,0 +1,8 @@
+EndBullet00	0	0	32	32	0	0
+EndBullet01	32	0	32	32	0	0
+EndBullet02	64	0	32	32	0	0
+EndBullet03	96	0	32	32	0	0
+EndBullet04	128	0	32	32	0	0
+EndBullet05	160	0	32	32	0	0
+EndBullet06	192	0	32	32	0	0
+EndBullet07	224	0	32	32	0	0

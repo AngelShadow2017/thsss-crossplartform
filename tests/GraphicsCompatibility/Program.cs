@@ -75,3 +75,97 @@ for (int i = 3; i < textPixels.Length; i += 4)
     if (textPixels[i] > 0) opaqueText++;
 if (opaqueText < 100) throw new Exception($"Dialogue text upload is empty: {opaqueText} pixels");
 Console.WriteLine($"PASS: dialogue Bitmap -> LockBits -> DataStream -> texture upload ({opaqueText} visible pixels)");
+
+using var modelTarget = new Texture(device, 64, 64, 1, Usage.RenderTarget, Format.A8R8G8B8, Pool.Default);
+using var modelSurface = modelTarget.GetSurfaceLevel(0);
+device.SetRenderTarget(0, modelSurface);
+device.Clear(ClearFlags.Target, System.Drawing.Color.Black, 1, 0);
+using var modelVertices = new VertexBuffer(device, 60, Usage.WriteOnly, VertexFormat.None, Pool.Default);
+var modelData = modelVertices.Lock(0, 60, LockFlags.None);
+modelData.WriteRange(new float[] { -1,-1,0,0,0, 1,-1,0,0,0, 0,1,0,0,0 });
+modelVertices.Unlock();
+device.SetStreamSource(0, modelVertices, 0, 20);
+device.SetTexture(0, texture);
+var material = new Material { Diffuse = new SlimDX.Direct3D9.Color4(1f,1f,1f,1f) };
+device.SetMaterial(ref material);
+device.SetRenderState(RenderState.SourceBlend, 2);
+device.SetRenderState(RenderState.DestinationBlend, 1);
+device.SetTransform(TransformState.World, Matrix.Identity);
+device.SetTransform(TransformState.View, Matrix.LookAtLH(new Vector3(0,0,-2), Vector3.Zero, Vector3.UnitY));
+device.SetTransform(TransformState.Projection, Matrix.PerspectiveFovLH(MathF.PI / 2, 1, 1, 10));
+device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList, 0, 1);
+unsafe { fixed (byte* p = pixel) gl.ReadPixels(32, 32, 1, 1, Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, p); }
+if (pixel[0] < 200 || pixel[1] > 30 || pixel[2] > 30)
+    throw new Exception($"3D camera triangle must be red at screen centre: {string.Join(',',pixel)}");
+device.SetRenderTarget(0, null);
+Console.WriteLine("PASS: real Device3D camera, VBO and textured triangle produce red centre pixel");
+
+device.SetRenderTarget(0, modelSurface);
+device.SetRenderState(RenderState.FogEnable, true);
+device.SetRenderState(RenderState.FogTableMode, SlimDX.Direct3D9.FogMode.Linear);
+device.SetRenderState(RenderState.FogColor, System.Drawing.Color.Blue.ToArgb());
+device.SetRenderState(RenderState.FogStart, 1.5f);
+device.SetRenderState(RenderState.FogEnd, 2.5f);
+device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList, 0, 1);
+unsafe { fixed (byte* p = pixel) gl.ReadPixels(32,32,1,1,Silk.NET.OpenGL.PixelFormat.Rgba,PixelType.UnsignedByte,p); }
+if (Math.Abs(pixel[0]-128) > 5 || pixel[1] > 5 || Math.Abs(pixel[2]-128) > 5)
+    throw new Exception($"Half-depth fog must mix red and blue equally: {string.Join(',',pixel)}");
+device.SetRenderState(RenderState.FogEnable, false);
+material.Ambient = new SlimDX.Direct3D9.Color4(1f,1f,1f,1f);
+device.Material = material;
+var light = new Light { Ambient = System.Drawing.Color.FromArgb(128,128,128) };
+device.SetLight(0, light);
+device.EnableLight(0,true);
+device.SetRenderState(RenderState.Lighting,true);
+device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList,0,1);
+unsafe { fixed(byte* p=pixel) gl.ReadPixels(32,32,1,1,Silk.NET.OpenGL.PixelFormat.Rgba,PixelType.UnsignedByte,p); }
+if (Math.Abs(pixel[0]-128)>5 || pixel[1]>5 || pixel[2]>5)
+    throw new Exception($"Stage billboard ambient light must halve red: {string.Join(',',pixel)}");
+device.SetRenderState(RenderState.Lighting,false);
+device.SetRenderTarget(0,null);
+if ((int)Blend.SourceAlpha != 5 || (int)Blend.InverseSourceAlpha != 6 || (int)Blend.One != 2)
+    throw new Exception("Blend enum no longer matches raw D3D9 state values");
+Console.WriteLine("PASS: fractional linear fog, ambient lighting and D3D blend constants");
+
+device.SetRenderTarget(0,modelSurface);
+material.Diffuse = new SlimDX.Direct3D9.Color4(1f,1f,1f,0.5f);
+device.Material = material;
+device.SetRenderState(RenderState.SourceBlend,Blend.SourceAlpha);
+device.SetRenderState(RenderState.DestinationBlend,Blend.InverseSourceAlpha);
+foreach (bool blending in new[] {false,true})
+{
+    device.Clear(ClearFlags.Target,System.Drawing.Color.Blue,1,0);
+    device.SetRenderState(RenderState.AlphaBlendEnable,blending);
+    device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList,0,1);
+    unsafe { fixed(byte* p=pixel) gl.ReadPixels(32,32,1,1,Silk.NET.OpenGL.PixelFormat.Rgba,PixelType.UnsignedByte,p); }
+    int expectedR = blending ? 128 : 255;
+    int expectedB = blending ? 128 : 0;
+    if(Math.Abs(pixel[0]-expectedR)>5 || Math.Abs(pixel[2]-expectedB)>5)
+        throw new Exception($"AlphaBlendEnable={blending} mismatch: {string.Join(',',pixel)}");
+}
+device.SetRenderTarget(0,null);
+Console.WriteLine("PASS: 3D drawing preserves AlphaBlendEnable on/off");
+
+// The additional fog equations share the original fixed-function depth input.
+device.SetRenderTarget(0,modelSurface);
+device.SetTexture(0,texture);
+device.SetStreamSource(0,modelVertices,0,20);
+device.SetFVF(VertexFormat.Position|VertexFormat.Texture1);
+device.Material=new Material{Diffuse=new SlimDX.Direct3D9.Color4(1f,1f,1f,1f)};
+device.SetRenderState(RenderState.AlphaBlendEnable,false);
+device.SetRenderState(RenderState.Lighting,false);
+device.SetRenderState(RenderState.FogEnable,true);
+device.SetRenderState(RenderState.FogColor,System.Drawing.Color.Blue.ToArgb());
+device.SetRenderState(RenderState.FogDensity,0.5f);
+foreach(var mode in new[]{SlimDX.Direct3D9.FogMode.Exponential,SlimDX.Direct3D9.FogMode.ExponentialSquared})
+{
+    device.SetRenderState(RenderState.FogTableMode,mode);
+    device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList,0,1);
+    unsafe { fixed(byte* p=pixel) gl.ReadPixels(32,32,1,1,Silk.NET.OpenGL.PixelFormat.Rgba,PixelType.UnsignedByte,p); }
+    float factor=MathF.Exp(-1);
+    if(Math.Abs(pixel[0]-255*factor)>5 || Math.Abs(pixel[2]-255*(1-factor))>5)
+        throw new Exception($"Fog mode {mode} pixel mismatch: {string.Join(',',pixel)}");
+}
+device.SetRenderState(RenderState.FogEnable,false);
+device.SetRenderTarget(0,null);
+Console.WriteLine("PASS: Exp and Exp2 fog equations match GPU depth samples");

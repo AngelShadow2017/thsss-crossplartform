@@ -1,0 +1,12 @@
+BossSeiryuu-00	0	0	64	80	0	0
+BossSeiryuu-01	64	0	64	80	0	0
+BossSeiryuu-02	128	0	64	80	0	0
+BossSeiryuu-03	192	0	64	80	0	0
+BossSeiryuu-10	0	80	64	80	0	0
+BossSeiryuu-11	64	80	64	80	0	0
+BossSeiryuu-12	192	80	64	80	0	0
+BossSeiryuu-13	128	80	64	80	0	0
+BossSeiryuu-20	0	160	64	80	0	0
+BossSeiryuu-21	64	160	64	80	0	0
+BossSeiryuu-22	128	160	64	80	0	0
+BossSeiryuu-23	192	160	64	80	0	0
