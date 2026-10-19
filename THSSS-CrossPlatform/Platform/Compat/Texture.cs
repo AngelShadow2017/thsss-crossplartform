@@ -126,8 +126,9 @@ public unsafe class Texture : IDisposable
 
     public DataRectangle LockRectangle(int level, System.Drawing.Rectangle rect, LockFlags flags)
     {
-        // In OpenGL, we'd use glMapBuffer or PBO
-        return new DataRectangle { Pitch = _width * 4, Data = new DataStream(_width * _height * 4, true, true) };
+        _lockedRectangle = rect;
+        _lockedData = new DataStream(rect.Width * rect.Height * 4, true, true);
+        return new DataRectangle { Pitch = rect.Width * 4, Data = _lockedData };
     }
 
     public DataRectangle LockRectangle(int level, LockFlags flags)
@@ -135,9 +136,21 @@ public unsafe class Texture : IDisposable
         return LockRectangle(level, new System.Drawing.Rectangle(0, 0, _width, _height), flags);
     }
 
-    public void UnlockRectangle(int level)
+    private DataStream _lockedData;
+    private System.Drawing.Rectangle _lockedRectangle;
+
+    public unsafe void UnlockRectangle(int level)
     {
-        // In OpenGL, unmap the buffer
+        var bytes = _lockedData.ToArray();
+        _gl.BindTexture(TextureTarget.Texture2D, _handle);
+        fixed (byte* ptr = bytes)
+        {
+            _gl.TexSubImage2D(TextureTarget.Texture2D, 0,
+                _lockedRectangle.X, _lockedRectangle.Y,
+                (uint)_lockedRectangle.Width, (uint)_lockedRectangle.Height,
+                PixelFormat.Bgra, PixelType.UnsignedByte, ptr);
+        }
+        _lockedData = null;
     }
 
     public void GenerateMipMaps()

@@ -7,11 +7,11 @@ internal class Story_SSStaff : BaseStory_SSS
 	public Story_SSStaff(StageDataPackage StageData)
 		: base(StageData)
 	{
-		switch (base.MyPlane.Name)
+		// The staff roll is reachable without a player ship in the scene (for
+		// example when entering the ending directly), so fall back to the default
+		// conversation instead of dereferencing a null MyPlane.
+		switch (base.MyPlane?.Name)
 		{
-		case "Reimu":
-			LoadConversation("Story/Staff-1A.csv");
-			break;
 		case "Marisa":
 			LoadConversation("Story/Staff-1B.csv");
 			break;
@@ -20,6 +20,10 @@ internal class Story_SSStaff : BaseStory_SSS
 			break;
 		case "Koishi":
 			LoadConversation("Story/Staff-1D.csv");
+			break;
+		case "Reimu":
+		default:
+			LoadConversation("Story/Staff-1A.csv");
 			break;
 		}
 		SBox.MaxTransparent = 0;

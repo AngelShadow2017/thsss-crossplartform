@@ -61,6 +61,12 @@ public static class Program
         _game = new Game_Main();
         if (!_game.initSuccess)
             Console.Error.WriteLine("Game_Main initialisation failed; see the diagnostic message.");
+
+        // Verification hook: THSSS_START_STATE=All skips straight to the ending so
+        // the dialogue box can be checked without playing through a stage.
+        var startState = Environment.GetEnvironmentVariable("THSSS_START_STATE");
+        if (_game.initSuccess && !string.IsNullOrEmpty(startState))
+            _game.RequestState(startState);
     }
 
     private static void OnRender(double deltaTime)

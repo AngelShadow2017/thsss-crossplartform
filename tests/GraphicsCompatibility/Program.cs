@@ -53,3 +53,25 @@ if (pixel[0] < 240 || pixel[1] > 15 || pixel[2] > 15)
     throw new Exception($"Composited render target top-left must remain red; got {string.Join(',', pixel)}");
 device.SetRenderTarget(0, null);
 Console.WriteLine("PASS: texture row orientation, FBO creation/restoration, transformed sprite pixel");
+
+using var bitmap = new System.Drawing.Bitmap(128, 64);
+using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+using (var font = new System.Drawing.Font("楷体", 16f, System.Drawing.FontStyle.Bold))
+{
+    graphics.DrawString("夏夜对话", font, System.Drawing.Brushes.White, 0, 0);
+}
+using var textTexture = new Texture(device, 128, 64, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+var locked = textTexture.LockRectangle(0, LockFlags.Discard);
+var bitmapData = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, 128, 64),
+    System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
+locked.Data.WriteRange(bitmapData.Scan0, 128 * 64 * 4);
+bitmap.UnlockBits(bitmapData);
+textTexture.UnlockRectangle(0);
+var textPixels = new byte[128 * 64 * 4];
+gl.BindTexture(TextureTarget.Texture2D, textTexture.Handle);
+unsafe { fixed (byte* p = textPixels) gl.GetTexImage(TextureTarget.Texture2D, 0, Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, p); }
+int opaqueText = 0;
+for (int i = 3; i < textPixels.Length; i += 4)
+    if (textPixels[i] > 0) opaqueText++;
+if (opaqueText < 100) throw new Exception($"Dialogue text upload is empty: {opaqueText} pixels");
+Console.WriteLine($"PASS: dialogue Bitmap -> LockBits -> DataStream -> texture upload ({opaqueText} visible pixels)");

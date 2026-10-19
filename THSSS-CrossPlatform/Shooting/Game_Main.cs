@@ -16,6 +16,15 @@ public class Game_Main
 
 	private GlobalDataPackage GDP = new GlobalDataPackage();
 
+	/// <summary>
+	/// Carries a start-state request until GameStatesDictionary is populated by the
+	/// loading thread; issuing it earlier would index a half-built dictionary.
+	/// </summary>
+	private string _pendingStartState;
+
+	/// <summary>Verification hook only: lets the launcher jump straight to a state.</summary>
+	public void RequestState(string stateName) => _pendingStartState = stateName;
+
 	private IGameState PresentState;
 
 	private Dictionary<string, IGameState> GameStatesDictionary;
@@ -382,6 +391,19 @@ public class Game_Main
 				SDPswitch = new StageDataPackage(GlobalData)
 			};
 		}
+		if (_pendingStartState != null && PresentState != null && PresentState.StateSwitchData == null
+			&& GameStatesDictionary != null && GameStatesDictionary.ContainsKey(_pendingStartState))
+		{
+			var requested = _pendingStartState;
+			_pendingStartState = null;
+			PresentState.StateSwitchData = new StateSwitchDataPackage
+			{
+				NextState = requested,
+				NeedInit = true,
+				SDPswitch = new StageDataPackage(GlobalData),
+			};
+		}
+
 		if (PresentState.StateSwitchData != null)
 		{
 			StateSwitchDataPackage stateSwitchData = PresentState.StateSwitchData;
@@ -392,6 +414,13 @@ public class Game_Main
 			}
 			if (stateSwitchData.NextState != null)
 			{
+				// A start-state request can arrive before the loading thread has
+				// registered that state; skip it until the entry exists.
+				if (!GameStatesDictionary.ContainsKey(stateSwitchData.NextState))
+				{
+					PresentState.StateSwitchData = null;
+					return;
+				}
 				if (stateSwitchData.NextState == "MainMenu" && GlobalData.Rep != null)
 				{
 					GlobalData.Rep.CloseRpy();

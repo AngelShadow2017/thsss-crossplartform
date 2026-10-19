@@ -315,11 +315,18 @@ public class StageDataPackage
 
 	public bool FindScore(ScoreHistory SH)
 	{
+		// Same reasoning as FindClear: the ending can run without a player ship.
+		if (SH == null) return false;
+		if (MyPlane == null) return SH.Rank == Difficulty;
 		return SH.Rank == Difficulty && SH.MyPlaneFullName == MyPlane.FullName;
 	}
 
 	public bool FindClear(ClearHistory CH)
 	{
+		// The ending state runs without a player ship, so compare by rank only in
+		// that case instead of dereferencing MyPlane.
+		if (CH == null) return false;
+		if (MyPlane == null) return CH.Rank == Difficulty;
 		return CH.Rank == Difficulty && CH.MyPlaneFullName == MyPlane.FullName;
 	}
 
