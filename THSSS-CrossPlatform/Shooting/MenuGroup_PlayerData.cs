@@ -79,18 +79,15 @@ internal class MenuGroup_PlayerData : BaseMenuGroup
 	public override void Ctrl()
 	{
 		base.Ctrl();
-		MenuItemListPlane.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListPlane)){
 			x.Ctrl();
-		});
-		ScorePageList.ForEach(delegate(DescriptionMenuItem x)
-		{
+		};
+		foreach (DescriptionMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ScorePageList)){
 			x.Ctrl();
-		});
-		ClearHistoryList.ForEach(delegate(BaseMenuItem x)
-		{
+		};
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ClearHistoryList)){
 			x.Ctrl();
-		});
+		};
 	}
 
 	public override void ProcessKeys()
@@ -154,10 +151,9 @@ internal class MenuGroup_PlayerData : BaseMenuGroup
 		{
 			MenuPlaneSelectIndex -= MenuItemListPlane.Count;
 		}
-		MenuItemListPlane.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListPlane)){
 			x.Selected = false;
-		});
+		};
 		MenuItemListPlane[MenuPlaneSelectIndex].Select();
 		ScorePageIndex = 0;
 		AddNewScorePage();
@@ -459,18 +455,15 @@ internal class MenuGroup_PlayerData : BaseMenuGroup
 	public override void Show()
 	{
 		base.Show();
-		MenuItemListPlane.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListPlane)){
 			x.Show();
-		});
-		ScorePageList.ForEach(delegate(DescriptionMenuItem x)
-		{
+		};
+		foreach (DescriptionMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ScorePageList)){
 			x.Show();
-		});
-		ClearHistoryList.ForEach(delegate(BaseMenuItem x)
-		{
+		};
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ClearHistoryList)){
 			x.Show();
-		});
+		};
 	}
 
 	public bool FindScore(ScoreHistory SH)

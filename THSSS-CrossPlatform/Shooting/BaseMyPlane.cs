@@ -594,10 +594,9 @@ public class BaseMyPlane : BaseObject
 	{
 		base.Time = 300;
 		EnchantmentCount = 0;
-		SubPlaneList.ForEach(delegate(BaseSubPlane x)
-		{
+		foreach (BaseSubPlane x in SlimDX.Compat.ListCompat.Snapshot(SubPlaneList)){
 			x.Refresh();
-		});
+		};
 		SpellEnabled = true;
 	}
 
@@ -900,13 +899,12 @@ public class BaseMyPlane : BaseObject
 			BulletRemover_Small bulletRemover_Small = new BulletRemover_Small(base.StageData, base.OriginalPosition);
 			bulletRemover_Small.Region = 500;
 			ChangeEnchantment(EnchantmentType.None);
-			base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-			{
+			foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 				if (x is BaseSpellCard)
 				{
 					((BaseSpellCard)x).Missed = true;
 				}
-			});
+			};
 		}
 		else
 		{
@@ -966,14 +964,13 @@ public class BaseMyPlane : BaseObject
 			EnchantmentTime--;
 			if (EnchantmentState == EnchantmentType.Blue)
 			{
-				base.ItemList.ForEach(delegate(BaseItem x)
-				{
+				foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 					if (!(x is ShootingStarShard))
 					{
 						x.Obtain = true;
 						x.Doubled = true;
 					}
-				});
+				};
 			}
 		}
 		if (base.Story != null || base.Time <= 70)
@@ -991,13 +988,12 @@ public class BaseMyPlane : BaseObject
 				BulletRemover_Small bulletRemover_Small = new BulletRemover_Small(base.StageData, base.OriginalPosition);
 				bulletRemover_Small.Region = 500;
 				ChangeEnchantment(EnchantmentType.None);
-				base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-				{
+				foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 					if (x is BaseSpellCard)
 					{
 						((BaseSpellCard)x).Bombed = true;
 					}
-				});
+				};
 			}
 			else if (Spell > 0 && base.SpellList.Count == 0 && base.Time > 30 && SpellEnabled)
 			{

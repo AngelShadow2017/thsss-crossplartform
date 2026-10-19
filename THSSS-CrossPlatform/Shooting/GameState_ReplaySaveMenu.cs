@@ -30,10 +30,9 @@ internal class GameState_ReplaySaveMenu : BaseMenu, IGameState
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 	}
 

@@ -75,17 +75,15 @@ public class Spell_AyaB : BaseSpell
 			base.StageData.SoundPlay("se_tan01.wav");
 			base.StageData.VibrateStart(8);
 		}
-		base.ItemList.ForEach(delegate(BaseItem x)
-		{
+		foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 			x.Region = 1000;
 			x.Doubled = true;
-		});
+		};
 		if (base.Time == base.LifeTime)
 		{
-			base.ItemList.ForEach(delegate(BaseItem x)
-			{
+			foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 				x.Obtain = true;
-			});
+			};
 			BaseEffect baseEffect2 = new BaseEffect(base.StageData, null, base.MyPlane.Position, 0f, Math.PI / 2.0);
 			baseEffect2.TxtureObject = base.MyPlane.TxtureObject;
 			baseEffect2.Scale = 3f;

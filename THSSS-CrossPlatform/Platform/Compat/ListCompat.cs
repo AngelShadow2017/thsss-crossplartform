@@ -20,6 +20,12 @@ public static class ListCompat
     /// called explicitly (<c>ListCompat.ForEach(list, a =&gt; ...)</c>) rather than
     /// relying on extension-method lookup, which the instance method would win.
     /// </summary>
+    /// <summary>Copy used by rewritten call sites that mutate while iterating.</summary>
+    public static T[] Snapshot<T>(List<T> list) => list.ToArray();
+
+    /// <summary>Copy used by rewritten call sites that mutate while iterating.</summary>
+    public static T[] Snapshot<T>(IList<T> list) => System.Linq.Enumerable.ToArray(list);
+
     public static void ForEach<T>(List<T> list, Action<T> action)
     {
         ArgumentNullException.ThrowIfNull(list);

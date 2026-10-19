@@ -472,10 +472,9 @@ internal class BaseStage : BaseGameState, IGameState
 		{
 			base.InterfaceList[num2].Ctrl();
 		}
-		base.SoundPlayList.ForEach(delegate(XAudio2_Player x)
-		{
+		foreach (XAudio2_Player x in SlimDX.Compat.ListCompat.Snapshot(base.SoundPlayList)){
 			x.Play();
-		});
+		};
 		if (base.StageData.OnReplay && base.TimeMain % 6 != 0 && base.KClass.Key_plus && base.MyPlane.Life >= 0 && base.StateSwitchData == null)
 		{
 			UpdateData();
@@ -587,95 +586,82 @@ internal class BaseStage : BaseGameState, IGameState
 		{
 			base.Boss.Show();
 		}
-		base.MyBulletList.ForEach(delegate(BaseObject x)
-		{
+		foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.MyBulletList)){
 			x.Show();
-		});
+		};
 		base.MyPlane.Show();
-		base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-		{
+		foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 			x.Show();
-		});
-		base.ItemList.ForEach(delegate(BaseItem x)
-		{
+		};
+		foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 			if (!x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
-		base.SpellList.ForEach(delegate(BaseObject x)
-		{
+		};
+		foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.SpellList)){
 			x.Show();
-		});
-		base.ItemList.ForEach(delegate(BaseItem x)
-		{
+		};
+		foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer < 0)
 			{
 				x.Show();
 			}
-		});
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		};
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer == 0)
 			{
 				x.Show();
 			}
-		});
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		};
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer > 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer < 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer == 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer > 0)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 		base.Particle3D.Show();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
@@ -684,10 +670,9 @@ internal class BaseStage : BaseGameState, IGameState
 			base.Story.Show();
 		}
 		ShowInterface();
-		base.InterfaceList.ForEach(delegate(BaseObject x)
-		{
+		foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.InterfaceList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 		base.GlobalData.ScreenTexMan.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);

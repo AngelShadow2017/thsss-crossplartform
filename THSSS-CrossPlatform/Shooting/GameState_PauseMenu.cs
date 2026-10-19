@@ -56,20 +56,19 @@ internal class GameState_PauseMenu : BaseMenu, IGameState
 		if (base.GlobalData.LastState is BaseStage)
 		{
 			((BaseStage)base.GlobalData.LastState).ShowInterface();
-			((BaseStage)base.GlobalData.LastState).InterfaceList.ForEach(delegate(BaseObject x)
+			foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(((BaseStage)base.GlobalData.LastState).InterfaceList))
 			{
 				x.Show();
-			});
+			}
 		}
 		base.StageData.MenuGroupList[base.StageData.MenuGroupList.Count - 1].Show();
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 	}
 

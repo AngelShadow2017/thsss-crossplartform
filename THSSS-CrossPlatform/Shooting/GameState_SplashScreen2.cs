@@ -47,10 +47,9 @@ internal class GameState_SplashScreen2 : GameState_SplashScreen, IGameState
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.Background.Show(Active: false);
 		base.SpriteMain.Draw2D(base.TxtureObject, 1f, 0f, new Point(320, 240), base.Background.Light);
-		base.StageData.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.StageData.EffectList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 	}
 }

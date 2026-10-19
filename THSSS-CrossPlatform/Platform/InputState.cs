@@ -20,6 +20,10 @@ public static class KeyboardInput
 
     public static bool IsPressed(Key key) => Pressed.ContainsKey(key);
 
+    /// <summary>Copy of the keys currently held, used to build a frame snapshot.</summary>
+    public static System.Collections.Generic.List<Key> Snapshot()
+        => new(Pressed.Keys);
+
     public static void Clear() => Pressed.Clear();
 }
 

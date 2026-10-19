@@ -31,10 +31,9 @@ public class BulletPicEmitter01 : BaseBulleEmitter
 		base.Ctrl();
 		if (base.Time >= base.LifeTime)
 		{
-			base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-			{
+			foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 				x.Enabled = true;
-			});
+			};
 		}
 		if (base.Time % 2 != 0 || indexY >= length)
 		{

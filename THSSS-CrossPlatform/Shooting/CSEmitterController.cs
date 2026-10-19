@@ -29,8 +29,7 @@ public class CSEmitterController : BaseBulleEmitter
 		{
 			return;
 		}
-		CSData.EmitterList.ForEach(delegate(BaseEmitter_CS em)
-		{
+		foreach (BaseEmitter_CS em in SlimDX.Compat.ListCompat.Snapshot(CSData.EmitterList)){
 			if (em.BindingID == -1 && em.StartTime == base.Time)
 			{
 				BaseEmitter_CS baseEmitter_CS = (BaseEmitter_CS)em.Clone();
@@ -43,6 +42,6 @@ public class CSEmitterController : BaseBulleEmitter
 				baseEmitter_CS.Time = base.Time;
 				base.StageData.EnemyPlaneList.Add(baseEmitter_CS);
 			}
-		});
+		};
 	}
 }

@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <!-- Console app: the original WinExe suppresses a console window, which is a
+         Windows-only idea. A plain Exe runs identically on Linux/macOS/Windows. -->
+    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>Shooting</RootNamespace>
     <AssemblyName>THSSS</AssemblyName>
@@ -9,8 +11,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>CS8981;CS0169;CS0414;CS0649;CS0108;CS0618;CS0612;CS0114;SYSLIB0011</NoWarn>
-    <!-- Replay/save data was serialized with BinaryFormatter; keep it behaviour-compatible. -->
-    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
   </PropertyGroup>
 
   <ItemGroup>

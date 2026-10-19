@@ -26,15 +26,14 @@ public class Spell_AyaB_Laser : BaseSpell
 		if (Target == null)
 		{
 			double dist = 500.0;
-			base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-			{
+			foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 				double distance = GetDistance(x);
 				if (distance < dist)
 				{
 					Target = x;
 					dist = distance;
 				}
-			});
+			};
 		}
 		if (Target == null)
 		{

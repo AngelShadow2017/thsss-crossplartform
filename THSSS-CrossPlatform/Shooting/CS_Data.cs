@@ -448,8 +448,7 @@ public class CS_Data
 
 	private void AddNode(int id, TreeNode treeNode)
 	{
-		EmitterList.ForEach(delegate(BaseEmitter_CS b)
-		{
+		foreach (BaseEmitter_CS b in SlimDX.Compat.ListCompat.Snapshot(EmitterList)){
 			//IL_0055: Unknown result type (might be due to invalid IL or missing references)
 			//IL_005b: Expected O, but got Unknown
 			if (b.BindingID == id)
@@ -461,6 +460,6 @@ public class CS_Data
 				treeNode.Nodes.Add(val);
 				AddNode(b.ID, val);
 			}
-		});
+		};
 	}
 }

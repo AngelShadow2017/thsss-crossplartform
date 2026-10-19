@@ -42,13 +42,12 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 				KC.ArrowDown = true;
 			}
 		}
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (x.HitCheck(this, x.Region) || base.DeadTime > base.Time)
 			{
 				KC.Key_X = true;
 			}
-		});
+		};
 		base.StageData.GlobalData.KClass.Hex2Key(KC.Key2Hex());
 		base.Ctrl();
 	}
@@ -57,8 +56,7 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 	{
 		double tmp = 0.0;
 		double d;
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			Vector2 vector = new Vector2(OriginalPos.X, OriginalPos.Y);
 			Vector2 vector2 = new Vector2(x.OriginalPosition.X, x.OriginalPosition.Y);
 			d = (vector - vector2).Length() - (float)base.Region - (float)x.Region;
@@ -70,9 +68,8 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 				d = (vector - vector2).Length() - (float)base.Region - (float)x.Region;
 				tmp += 3000.0 / d / d;
 			}
-		});
-		base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-		{
+		};
+		foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 			if (x.OriginalPosition.X > 0f && x.OriginalPosition.X < (float)base.BoundRect.Width && x.OriginalPosition.Y > 0f && x.OriginalPosition.Y < (float)base.BoundRect.Height)
 			{
 				Vector2 vector = new Vector2(OriginalPos.X, OriginalPos.Y);
@@ -80,7 +77,7 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 				d = (vector - vector2).Length() - (float)base.Region - (float)x.Region;
 				tmp += 10000.0 / d / d;
 			}
-		});
+		};
 		if (base.Boss != null)
 		{
 			d = base.Boss.GetDistance(OriginalPos) - (double)base.Boss.Region - (double)base.Region;
@@ -142,8 +139,7 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 	{
 		Vector2 forceSum = Vector2.Zero;
 		float d;
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			Vector2 vector7 = new Vector2(base.OriginalPosition.X, base.OriginalPosition.Y);
 			Vector2 vector8 = new Vector2(x.OriginalPosition.X, x.OriginalPosition.Y);
 			Vector2 vector9 = vector7 - vector8;
@@ -167,9 +163,8 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 				vector9 *= 2000f / d / d;
 				forceSum += vector9;
 			}
-		});
-		base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-		{
+		};
+		foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 			if (x.OriginalPosition.X > 0f && x.OriginalPosition.X < (float)base.BoundRect.Width && x.OriginalPosition.Y > 0f && x.OriginalPosition.Y < (float)base.BoundRect.Height)
 			{
 				Vector2 vector7 = new Vector2(base.OriginalPosition.X, base.OriginalPosition.Y);
@@ -187,7 +182,7 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 				vector9 *= 5000f / d / d;
 				forceSum += vector9;
 			}
-		});
+		};
 		if (base.Boss != null)
 		{
 			Vector2 vector = new Vector2(base.OriginalPosition.X, base.OriginalPosition.Y);
@@ -227,13 +222,12 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 	{
 		Vector2 result = Vector2.Zero;
 		float tmp = 1000f;
-		base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-		{
+		foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 			if (x.OriginalPosition.Y > 0f && x.OriginalPosition.Y < 300f && x.HealthPoint < 20000f && Math.Abs(x.OriginalPosition.X - base.OriginalPosition.X) < tmp)
 			{
 				tmp = x.OriginalPosition.X;
 			}
-		});
+		};
 		if (tmp < 1000f)
 		{
 			result = new Vector2(10f * (tmp - base.OriginalPosition.X), 0f);
@@ -252,13 +246,12 @@ public class AutoPlane(StageDataPackage StageData, Point Position) : BaseMyPlane
 			return Vector2.Zero;
 		}
 		int itemCount = 0;
-		base.ItemList.ForEach(delegate(BaseItem x)
-		{
+		foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 			if (!x.Obtain)
 			{
 				itemCount++;
 			}
-		});
+		};
 		if (itemCount > 5)
 		{
 			return new Vector2(0f, 2f * (110f - base.OriginalPosition.Y));

@@ -124,20 +124,18 @@ internal class GameState_MusicLoading : BaseMenu, IGameState
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.SpriteMain.Draw2D(base.GlobalData.TextureObjectDictionary["NowLoading-0"], 1f, 0f, new Point(520, 440), base.Background.Light);
-		base.StageData.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.StageData.EffectList)){
 			if (!x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 	}
 

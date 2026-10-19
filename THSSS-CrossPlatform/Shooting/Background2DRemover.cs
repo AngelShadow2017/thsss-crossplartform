@@ -14,10 +14,9 @@ public class Background2DRemover : BaseEffect
 	public override void Ctrl()
 	{
 		base.Ctrl();
-		base.Background.BackgroundList.ForEach(delegate(BaseObject x)
-		{
+		foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.Background.BackgroundList)){
 			x.TransparentValueF -= base.MaxTransparent / base.LifeTime;
-		});
+		};
 		if (base.Time >= base.LifeTime)
 		{
 			base.Background.BackgroundList.Clear();

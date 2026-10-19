@@ -191,13 +191,12 @@ public class MyPlane_Koishi : BaseMyPlane_Touhou
 			BulletRemover_Small bulletRemover_Small = new BulletRemover_Small(base.StageData, base.OriginalPosition);
 			bulletRemover_Small.Region = 500;
 			ChangeEnchantment(EnchantmentType.None);
-			base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-			{
+			foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 				if (x is BaseSpellCard)
 				{
 					((BaseSpellCard)x).Missed = true;
 				}
-			});
+			};
 		}
 		else if (GodMode)
 		{
@@ -207,13 +206,12 @@ public class MyPlane_Koishi : BaseMyPlane_Touhou
 			bulletRemover_Small2.Region = 150;
 			base.Time = base.UnmatchedTime - 60;
 			new ItemGetter(base.StageData);
-			base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-			{
+			foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 				if (x is BaseSpellCard)
 				{
 					((BaseSpellCard)x).Missed = true;
 				}
-			});
+			};
 		}
 		else
 		{

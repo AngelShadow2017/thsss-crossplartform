@@ -294,10 +294,9 @@ public class EventGroup
 	{
 		EventGroup ev = (EventGroup)MemberwiseClone();
 		ev.EventList = new List<Event>();
-		EventList.ForEach(delegate(Event x)
-		{
+		foreach (Event x in SlimDX.Compat.ListCompat.Snapshot(EventList)){
 			ev.EventList.Add((Event)x.Clone());
-		});
+		};
 		return ev;
 	}
 }

@@ -14,11 +14,10 @@ public class ItemGetter : BaseEffect
 	public override void Ctrl()
 	{
 		base.Ctrl();
-		base.ItemList.ForEach(delegate(BaseItem x)
-		{
+		foreach (BaseItem x in SlimDX.Compat.ListCompat.Snapshot(base.ItemList)){
 			x.Obtain = true;
 			x.Doubled = true;
-		});
+		};
 	}
 
 	public override void Show()

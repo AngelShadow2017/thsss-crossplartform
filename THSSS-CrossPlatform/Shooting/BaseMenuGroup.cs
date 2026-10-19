@@ -49,10 +49,9 @@ public class BaseMenuGroup : BaseObject
 		{
 			return;
 		}
-		MenuItemList.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemList)){
 			x.Ctrl();
-		});
+		};
 		if (MenuTilte != null)
 		{
 			if (base.StageData.MenuGroupList[base.StageData.MenuGroupList.Count - 1] == this && base.TimeMain > OnRemoveMenu)
@@ -133,10 +132,9 @@ public class BaseMenuGroup : BaseObject
 			MenuSelectIndex -= MenuItemList.Count;
 		}
 		LastSelectTime = base.TimeMain;
-		MenuItemList.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemList)){
 			x.Selected = false;
-		});
+		};
 		MenuItemList[MenuSelectIndex].Select();
 	}
 
@@ -145,10 +143,9 @@ public class BaseMenuGroup : BaseObject
 		base.Show();
 		if (MenuItemList.Count > 0)
 		{
-			MenuItemList.ForEach(delegate(BaseMenuItem x)
-			{
+			foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemList)){
 				x.Show();
-			});
+			};
 			if (MenuTilte != null)
 			{
 				MenuTilte.Show();

@@ -129,10 +129,9 @@ internal class MenuGroup_ScoreSaver : BaseMenuGroup
 
 	public override void ProcessKeys()
 	{
-		ScoreHistorys.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ScoreHistorys)){
 			x.Ctrl();
-		});
+		};
 		if (base.KClass.ArrowDown && (LastDown == 0 || LastDown > 30))
 		{
 			base.MenuSelectIndex += 13;
@@ -244,10 +243,9 @@ internal class MenuGroup_ScoreSaver : BaseMenuGroup
 		base.Show();
 		if (ScoreHistorys.Count > 0)
 		{
-			ScoreHistorys.ForEach(delegate(BaseMenuItem x)
-			{
+			foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(ScoreHistorys)){
 				x.Show();
-			});
+			};
 		}
 	}
 }

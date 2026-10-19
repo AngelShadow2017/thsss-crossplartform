@@ -144,28 +144,25 @@ internal class GameState_MainMenu : BaseMenu, IGameState
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.Background2.Show(Active: false);
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active)
 			{
 				x.Show();
 			}
-		});
-		base.StageData.MenuGroupList.ForEach(delegate(BaseMenuGroup x)
-		{
+		};
+		foreach (BaseMenuGroup x in SlimDX.Compat.ListCompat.Snapshot(base.StageData.MenuGroupList)){
 			x.Show();
-		});
+		};
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 		base.Particle3D.Show();
 		if (base.TimeMain < 126)

@@ -82,10 +82,9 @@ internal class MenuGroup_PlayerSelect : BaseMenuGroup
 	public override void Ctrl()
 	{
 		base.Ctrl();
-		PlayerDescription.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(PlayerDescription)){
 			x.Ctrl();
-		});
+		};
 	}
 
 	public override void ProcessKeys()
@@ -214,10 +213,9 @@ internal class MenuGroup_PlayerSelect : BaseMenuGroup
 		base.Show();
 		if (base.StageData.MenuGroupList[base.StageData.MenuGroupList.Count - 1] == this)
 		{
-			PlayerDescription.ForEach(delegate(BaseMenuItem x)
-			{
+			foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(PlayerDescription)){
 				x.Show();
-			});
+			};
 		}
 	}
 }

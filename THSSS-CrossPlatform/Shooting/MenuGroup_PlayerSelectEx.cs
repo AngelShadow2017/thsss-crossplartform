@@ -115,10 +115,9 @@ internal class MenuGroup_PlayerSelectEx : MenuGroup_PlayerSelect
 		base.Show();
 		if (base.StageData.MenuGroupList[base.StageData.MenuGroupList.Count - 1] == this)
 		{
-			PlayerDescription.ForEach(delegate(BaseMenuItem x)
-			{
+			foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(PlayerDescription)){
 				x.Show();
-			});
+			};
 		}
 	}
 }

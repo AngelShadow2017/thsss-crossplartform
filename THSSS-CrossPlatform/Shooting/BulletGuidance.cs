@@ -29,8 +29,7 @@ public class BulletGuidance : BaseObject
 		if (Target == null && !targetFlag)
 		{
 			double dist = 300.0;
-			base.EnemyPlaneList.ForEach(delegate(BaseEnemyPlane x)
-			{
+			foreach (BaseEnemyPlane x in SlimDX.Compat.ListCompat.Snapshot(base.EnemyPlaneList)){
 				if (x.HitEnabled)
 				{
 					double distance = GetDistance(x);
@@ -40,7 +39,7 @@ public class BulletGuidance : BaseObject
 						dist = distance;
 					}
 				}
-			});
+			};
 		}
 		else
 		{

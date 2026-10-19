@@ -127,8 +127,7 @@ public class Replay
 			tmp += repInfo.LastStage;
 			tmp += "\r\n";
 			tmp += repInfo.SlowRate;
-			repInfo.MyPlaneData.ForEach(delegate(MyPlaneInfo x)
-			{
+			foreach (MyPlaneInfo x in SlimDX.Compat.ListCompat.Snapshot(repInfo.MyPlaneData)){
 				tmp += "\r\n";
 				object obj = tmp;
 				object[] array = new object[30]
@@ -169,7 +168,7 @@ public class Replay
 				array[28] = '\t';
 				array[29] = x.DataPosition.ToString();
 				tmp = string.Concat(array);
-			});
+			};
 			StreamWriter streamWriter = new StreamWriter(ReplayData);
 			streamWriter.Write(tmp);
 			streamWriter.Close();

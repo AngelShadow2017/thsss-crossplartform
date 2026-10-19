@@ -51,13 +51,12 @@ public class EnvironmentSSS01 : BaseObject, IEnvironment
 		base.Velocity += base.Accelerate;
 		if (base.Time % 2048 == 0)
 		{
-			base.Background3D.BackgroundList.ForEach(delegate(BaseObject x)
-			{
+			foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.Background3D.BackgroundList)){
 				if (x is Background3DObject && ((Background3DObject)x).model.Name != "591-1")
 				{
 					x.OriginalPosition = new PointF(x.OriginalPosition.X - 1024f, x.OriginalPosition.Y);
 				}
-			});
+			};
 		}
 		if (base.Time % 30 == 0)
 		{
@@ -83,13 +82,12 @@ public class EnvironmentSSS01 : BaseObject, IEnvironment
 		{
 			CameraPosition.Y -= 2000f;
 			CameraTarget.Y -= 2000f;
-			base.Background3D.BackgroundList.ForEach(delegate(BaseObject x)
-			{
+			foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.Background3D.BackgroundList)){
 				if (x is Background3DObject && ((Background3DObject)x).model.Name == "591-1")
 				{
 					x.OriginalPosition = new PointF(x.OriginalPosition.X, x.OriginalPosition.Y - 2000f);
 				}
-			});
+			};
 		}
 		CameraPosition.X = 40f * (float)Math.Sin((float)base.Time / 180f);
 		CameraTarget.X = 40f * (float)Math.Sin((float)base.Time / 180f);
@@ -101,13 +99,12 @@ public class EnvironmentSSS01 : BaseObject, IEnvironment
 				CameraPosition.Z += 1f;
 				CameraTarget.Z += 1.05f;
 			}
-			base.Background3D.BackgroundList.ForEach(delegate(BaseObject x)
-			{
+			foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.Background3D.BackgroundList)){
 				if (x is Background3DObject)
 				{
 					x.TransparentValueF -= 0.5f;
 				}
-			});
+			};
 		}
 		if (!OnBossAttack)
 		{

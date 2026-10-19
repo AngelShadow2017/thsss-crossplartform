@@ -34,10 +34,9 @@ internal class BaseMenu : BaseGameState, IGameState
 		{
 			base.StageData.MenuGroupList[count - 1].MenuSelect();
 		}
-		base.StageData.MenuGroupList.ForEach(delegate(BaseMenuGroup x)
-		{
+		foreach (BaseMenuGroup x in SlimDX.Compat.ListCompat.Snapshot(base.StageData.MenuGroupList)){
 			x.Ctrl();
-		});
+		};
 		base.Background3D.Ctrl();
 		base.Background.Ctrl();
 		base.Background2.Ctrl();
@@ -46,10 +45,9 @@ internal class BaseMenu : BaseGameState, IGameState
 			base.EffectList[num].Ctrl();
 		}
 		base.Particle3D.Ctrl();
-		base.SoundPlayList.ForEach(delegate(XAudio2_Player x)
-		{
+		foreach (XAudio2_Player x in SlimDX.Compat.ListCompat.Snapshot(base.SoundPlayList)){
 			x.Play();
-		});
+		};
 	}
 
 	public virtual void BackgroundDrama()

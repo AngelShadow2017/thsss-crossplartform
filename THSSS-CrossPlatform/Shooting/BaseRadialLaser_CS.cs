@@ -39,13 +39,11 @@ public class BaseRadialLaser_CS : Bullet_RadialLaser
 
 	public override void EventCtrl()
 	{
-		base.EventGroupList.ForEach(delegate(EventGroup a)
-		{
+		foreach (EventGroup a in SlimDX.Compat.ListCompat.Snapshot(base.EventGroupList)){
 			a.Update(this);
-		});
-		base.EventsExecutionList.ForEach(delegate(Execution a)
-		{
+		};
+		foreach (Execution a in SlimDX.Compat.ListCompat.Snapshot(base.EventsExecutionList)){
 			a.Update(this);
-		});
+		};
 	}
 }

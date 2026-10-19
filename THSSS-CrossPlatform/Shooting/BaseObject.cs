@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 
 namespace Shooting;
 
@@ -1144,19 +1143,21 @@ public class BaseObject
 		Position = b.Position;
 	}
 
+	/// <summary>
+	/// Deep clone used by the original build. The game only ever calls the
+	/// parameterless Clone overrides (BaseEmitter_CS clones each sub-object with
+	/// its own override), so this overload has no callers — but it is kept for
+	/// API compatibility and must not depend on BinaryFormatter (removed from
+	/// .NET modern). Falls back to MemberwiseClone, which matches what every
+	/// caller-side override already does.
+	/// </summary>
 	public object Clone(object Obj)
 	{
 		if (Obj == null)
 		{
 			return null;
 		}
-		MemoryStream memoryStream = new MemoryStream();
-		BinaryFormatter binaryFormatter = new BinaryFormatter();
-		binaryFormatter.Serialize(memoryStream, Obj);
-		memoryStream.Seek(0L, SeekOrigin.Begin);
-		object result = binaryFormatter.Deserialize(memoryStream);
-		memoryStream.Close();
-		return result;
+		return Obj is BaseObject baseObject ? baseObject.Clone() : Obj;
 	}
 
 	public virtual object Clone()

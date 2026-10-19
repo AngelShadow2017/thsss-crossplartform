@@ -77,10 +77,9 @@ internal class GameState_ED : BaseGameState, IGameState
 			base.InterfaceList[num2].Ctrl();
 		}
 		base.StageData.Vibrate();
-		base.SoundPlayList.ForEach(delegate(XAudio2_Player x)
-		{
+		foreach (XAudio2_Player x in SlimDX.Compat.ListCompat.Snapshot(base.SoundPlayList)){
 			x.Play();
-		});
+		};
 		if (base.TimeMain % 6 != 0 && base.KClass.Key_plus && base.MyPlane.Life >= 0 && base.StateSwitchData == null)
 		{
 			UpdateData();
@@ -190,64 +189,56 @@ internal class GameState_ED : BaseGameState, IGameState
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		base.DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		base.DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		base.SpriteMain.End();
 		base.SpriteMain.Begin(SpriteFlags.AlphaBlend);
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer < 0)
 			{
 				x.Show();
 			}
-		});
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		};
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer == 0)
 			{
 				x.Show();
 			}
-		});
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou x)
-		{
+		};
+		foreach (BaseBullet_Touhou x in SlimDX.Compat.ListCompat.Snapshot(base.BulletList)){
 			if (!x.Active && x.Layer > 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer < 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer == 0)
 			{
 				x.Show();
 			}
-		});
-		base.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		};
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(base.EffectList)){
 			if (!x.Active && x.Layer > 0)
 			{
 				x.Show();
 			}
-		});
+		};
 		if (base.Story != null)
 		{
 			base.Story.Show();

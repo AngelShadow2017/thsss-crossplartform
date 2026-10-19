@@ -201,14 +201,12 @@ public class BaseEmitter_CS : BaseEnemyPlane
 
 	public override void EventCtrl()
 	{
-		base.EventGroupList.ForEach(delegate(EventGroup a)
-		{
+		foreach (EventGroup a in SlimDX.Compat.ListCompat.Snapshot(base.EventGroupList)){
 			a.Update(this);
-		});
-		base.EventsExecutionList.ForEach(delegate(Execution a)
-		{
+		};
+		foreach (Execution a in SlimDX.Compat.ListCompat.Snapshot(base.EventsExecutionList)){
 			a.Update(this);
-		});
+		};
 	}
 
 	public override void Shoot()
@@ -331,8 +329,7 @@ public class BaseEmitter_CS : BaseEnemyPlane
 					{
 						continue;
 					}
-					CSData.EmitterList.ForEach(delegate(BaseEmitter_CS em)
-					{
+					foreach (BaseEmitter_CS em in SlimDX.Compat.ListCompat.Snapshot(CSData.EmitterList)){
 						if (em.BindingID == base.ID)
 						{
 							b.UnRemoveable = true;
@@ -357,7 +354,7 @@ public class BaseEmitter_CS : BaseEnemyPlane
 								baseEmitter_CS.LifeTime = Math.Min(SubBullet.LifeTime + base.Time, em.StartTime + em.Duration);
 							}
 						}
-					});
+					};
 				}
 				else if (EmitterMode == EmitterMode.Enemy)
 				{
@@ -376,8 +373,7 @@ public class BaseEmitter_CS : BaseEnemyPlane
 						enemy.SetBinding(this);
 					}
 					base.EnemyPlaneList.Add(enemy);
-					CSData.EmitterList.ForEach(delegate(BaseEmitter_CS em)
-					{
+					foreach (BaseEmitter_CS em in SlimDX.Compat.ListCompat.Snapshot(CSData.EmitterList)){
 						if (em.BindingID == base.ID)
 						{
 							BaseEmitter_CS baseEmitter_CS = (BaseEmitter_CS)em.Clone();
@@ -401,7 +397,7 @@ public class BaseEmitter_CS : BaseEnemyPlane
 								baseEmitter_CS.LifeTime = Math.Min(SubBullet.LifeTime + base.Time, em.StartTime + em.Duration);
 							}
 						}
-					});
+					};
 				}
 				else if (EmitterMode == EmitterMode.Effect)
 				{

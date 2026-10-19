@@ -198,8 +198,23 @@ namespace SlimDX.DirectInput
     public class KeyboardState
     {
         public byte[] PressedKeys = new byte[256];
-        public bool IsPressed(Key key) => KeyboardInput.IsPressed(key);
-        public bool IsReleased(Key key) => !KeyboardInput.IsPressed(key);
+
+        /// <summary>
+        /// Reflects the snapshot the window published for this frame. The original
+        /// DirectInput state was a per-frame copy too: KeyboardCapture keeps the
+        /// previous one to detect rising/falling edges.
+        /// </summary>
+        public bool IsPressed(Key key) => PressedKeys != null && PressedKeys.Length > (int)key && PressedKeys[(int)key] != 0;
+        public bool IsReleased(Key key) => !IsPressed(key);
+
+        internal static KeyboardState Capture()
+        {
+            var state = new KeyboardState();
+            foreach (var key in KeyboardInput.Snapshot())
+                if ((int)key >= 0 && (int)key < state.PressedKeys.Length)
+                    state.PressedKeys[(int)key] = 1;
+            return state;
+        }
     }
 
     // Keyboard device
@@ -208,7 +223,7 @@ namespace SlimDX.DirectInput
         public Keyboard() { }
         public Keyboard(Guid guid) : base(guid) { }
         public Keyboard(DirectInput directInput) { }
-        public new KeyboardState GetCurrentState() => new KeyboardState();
+        public new KeyboardState GetCurrentState() => KeyboardState.Capture();
     }
 
     // Joystick device

@@ -553,10 +553,9 @@ internal class Boss_Rika01 : BaseBossTouhou
 	{
 		if (base.OnSpell && base.StageData.SpellList.Count > 0 && base.MyPlane.Name != "Koishi")
 		{
-			base.StageData.SpellList.ForEach(delegate(BaseObject x)
-			{
+			foreach (BaseObject x in SlimDX.Compat.ListCompat.Snapshot(base.StageData.SpellList)){
 				x.Damage = 0;
-			});
+			};
 		}
 		else
 		{

@@ -126,17 +126,15 @@ public class BaseObject_CS : BaseObject
 	{
 		if (EventGroupList != null)
 		{
-			EventGroupList.ForEach(delegate(EventGroup a)
-			{
+			foreach (EventGroup a in SlimDX.Compat.ListCompat.Snapshot(EventGroupList)){
 				a.Update(this);
-			});
+			};
 		}
 		if (EventsExecutionList != null)
 		{
-			EventsExecutionList.ForEach(delegate(Execution a)
-			{
+			foreach (Execution a in SlimDX.Compat.ListCompat.Snapshot(EventsExecutionList)){
 				a.Update(this);
-			});
+			};
 		}
 	}
 
@@ -145,10 +143,9 @@ public class BaseObject_CS : BaseObject
 		BaseObject_CS b = (BaseObject_CS)base.Clone();
 		b.EventsExecutionList = new List<Execution>();
 		b.EventGroupList = new List<EventGroup>();
-		EventGroupList.ForEach(delegate(EventGroup x)
-		{
+		foreach (EventGroup x in SlimDX.Compat.ListCompat.Snapshot(EventGroupList)){
 			b.EventGroupList.Add((EventGroup)x.Clone());
-		});
+		};
 		return b;
 	}
 }

@@ -60,20 +60,18 @@ internal class MenuGroup_Manual : BaseMenuGroup
 	public override void SelectItemChanged()
 	{
 		base.SelectItemChanged();
-		MenuItemListManual.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListManual)){
 			x.Selected = false;
-		});
+		};
 		MenuItemListManual[base.MenuSelectIndex].Select();
 	}
 
 	public override void Ctrl()
 	{
 		base.Ctrl();
-		MenuItemListManual.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListManual)){
 			x.Ctrl();
-		});
+		};
 	}
 
 	public override void ProcessKeys()
@@ -102,9 +100,8 @@ internal class MenuGroup_Manual : BaseMenuGroup
 	public override void Show()
 	{
 		base.Show();
-		MenuItemListManual.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(MenuItemListManual)){
 			x.Show();
-		});
+		};
 	}
 }

@@ -168,25 +168,23 @@ internal class GameState_SplashScreen : IGameState
 		}
 		SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		Background.Show(Active: false);
-		StageData.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(StageData.EffectList)){
 			if (!x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		SpriteMain.End();
 		SpriteMain.Begin(SpriteFlags.AlphaBlend);
 		DeviceMain.SetRenderState(RenderState.SourceBlend, 5);
 		DeviceMain.SetRenderState(RenderState.DestinationBlend, 2);
 		SpriteMain.Draw2D(TxtureObject, 1f, 0f, new Point(520, 432), Background.Light);
-		StageData.EffectList.ForEach(delegate(BaseEffect x)
-		{
+		foreach (BaseEffect x in SlimDX.Compat.ListCompat.Snapshot(StageData.EffectList)){
 			if (x.Active)
 			{
 				x.Show();
 			}
-		});
+		};
 		SpriteMain.End();
 	}
 

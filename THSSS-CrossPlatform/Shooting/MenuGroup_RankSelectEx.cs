@@ -43,10 +43,9 @@ internal class MenuGroup_RankSelectEx : MenuGroup_RankSelect
 			base.MenuSelectIndex = base.MenuItemList.Count - 1;
 		}
 		base.LastSelectTime = base.TimeMain;
-		base.MenuItemList.ForEach(delegate(BaseMenuItem x)
-		{
+		foreach (BaseMenuItem x in SlimDX.Compat.ListCompat.Snapshot(base.MenuItemList)){
 			x.Selected = false;
-		});
+		};
 		base.MenuItemList[base.MenuSelectIndex].Select();
 	}
 

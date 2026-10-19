@@ -202,18 +202,15 @@ public class PlayerData
 		ScoreFile = new FileStream("Score.dat", FileMode.Create);
 		string tmp = null;
 		tmp = tmp + PlayerName + "\r\n";
-		SC_History.ForEach(delegate(SpellCardHistory x)
-		{
+		foreach (SpellCardHistory x in SlimDX.Compat.ListCompat.Snapshot(SC_History)){
 			tmp += x.Data2String();
-		});
-		S_History.ForEach(delegate(ScoreHistory x)
-		{
+		};
+		foreach (ScoreHistory x in SlimDX.Compat.ListCompat.Snapshot(S_History)){
 			tmp += x.Data2String();
-		});
-		C_History.ForEach(delegate(ClearHistory x)
-		{
+		};
+		foreach (ClearHistory x in SlimDX.Compat.ListCompat.Snapshot(C_History)){
 			tmp += x.Data2String();
-		});
+		};
 		tmp = Encryption.Encrypt(tmp);
 		StreamWriter streamWriter = new StreamWriter(ScoreFile);
 		streamWriter.Write(tmp);
@@ -228,29 +225,25 @@ public class PlayerData
 		string[] stringList = array[0].Split(new char[1] { '\n' });
 		int i = 0;
 		PlayerName = stringList[i++];
-		SC_History.ForEach(delegate(SpellCardHistory x)
-		{
+		foreach (SpellCardHistory x in SlimDX.Compat.ListCompat.Snapshot(SC_History)){
 			x.String2Data(stringList[i++]);
-		});
-		S_History.ForEach(delegate(ScoreHistory x)
-		{
+		};
+		foreach (ScoreHistory x in SlimDX.Compat.ListCompat.Snapshot(S_History)){
 			x.String2Data(stringList[i++]);
-		});
-		C_History.ForEach(delegate(ClearHistory x)
-		{
+		};
+		foreach (ClearHistory x in SlimDX.Compat.ListCompat.Snapshot(C_History)){
 			x.String2Data(stringList[i++]);
-		});
+		};
 		CheckEnable();
 	}
 
 	public void CheckEnable()
 	{
-		C_History.ForEach(delegate(ClearHistory x)
-		{
+		foreach (ClearHistory x in SlimDX.Compat.ListCompat.Snapshot(C_History)){
 			if (x.NoContinueClearTimes > 0)
 			{
 				ExtraEnabled = true;
 			}
-		});
+		};
 	}
 }

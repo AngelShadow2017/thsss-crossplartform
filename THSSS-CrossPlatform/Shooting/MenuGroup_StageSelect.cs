@@ -13,13 +13,12 @@ internal class MenuGroup_StageSelect : BaseMenuGroup
 		base.MenuItemList.Add(new BaseMenuItem(StageData, "Stage01"));
 		base.MenuItemList.Add(new BaseMenuItem(StageData, "Boss01"));
 		int practiceLevel = 1;
-		StageData.PData.C_History.ForEach(delegate(ClearHistory a)
-		{
+		foreach (ClearHistory a in SlimDX.Compat.ListCompat.Snapshot(StageData.PData.C_History)){
 			if (a.Rank == StageData.StateSwitchData.SDPswitch.Difficulty && a.MyPlaneFullName == StageData.StateSwitchData.SDPswitch.MyPlane.FullName)
 			{
 				practiceLevel = a.PracticeLevel;
 			}
-		});
+		};
 		if (practiceLevel > 1)
 		{
 			base.MenuItemList.Add(new BaseMenuItem(StageData, "Stage02"));

@@ -31,14 +31,12 @@ public class BaseCover_CS : BaseEmitter_CS
 
 	public override void EventCtrl()
 	{
-		base.EventGroupList.ForEach(delegate(EventGroup a)
-		{
+		foreach (EventGroup a in SlimDX.Compat.ListCompat.Snapshot(base.EventGroupList)){
 			a.Update(this);
-		});
-		base.EventsExecutionList.ForEach(delegate(Execution a)
-		{
+		};
+		foreach (Execution a in SlimDX.Compat.ListCompat.Snapshot(base.EventsExecutionList)){
 			a.Update(this);
-		});
+		};
 	}
 
 	public override void HitCheckAll()
@@ -47,16 +45,18 @@ public class BaseCover_CS : BaseEmitter_CS
 		{
 			return;
 		}
-		base.BulletList.ForEach(delegate(BaseBullet_Touhou b)
+		// Snapshot both levels: a cover's event groups may mutate the bullet list
+		// (and each other) while we walk it, which .NET 2.0 tolerated.
+		foreach (BaseBullet_Touhou b in SlimDX.Compat.ListCompat.Snapshot(base.BulletList))
 		{
 			if (b.Cover && (Type == 0 || b.ID == CtrlID) && HitCheck(b))
 			{
-				SubEventGroupList.ForEach(delegate(EventGroup e)
+				foreach (EventGroup e in SlimDX.Compat.ListCompat.Snapshot(SubEventGroupList))
 				{
 					e.Update(b);
-				});
+				}
 			}
-		});
+		}
 	}
 
 	public override bool HitCheck(BaseObject Target)
