@@ -52,3 +52,5 @@
 /home/ictye/Projects/reatest/tests/GraphicsCompatibility/obj/Debug/net8.0/GraphicsCompatibility.pdb
 /home/ictye/Projects/reatest/tests/GraphicsCompatibility/obj/Debug/net8.0/GraphicsCompatibility.genruntimeconfig.cache
 /home/ictye/Projects/reatest/tests/GraphicsCompatibility/obj/Debug/net8.0/ref/GraphicsCompatibility.dll
+/home/ictye/Projects/reatest/tests/GraphicsCompatibility/bin/Debug/net8.0/SixLabors.Fonts.dll
+/home/ictye/Projects/reatest/tests/GraphicsCompatibility/bin/Debug/net8.0/SixLabors.ImageSharp.Drawing.dll

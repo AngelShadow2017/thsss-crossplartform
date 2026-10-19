@@ -781,9 +781,9 @@ namespace SlimDX.Direct3D9
 {
     public enum TransformState
     {
-        World = 1,
-        View = 2,
-        Projection = 3,
+        World = 0,
+        View = 1,
+        Projection = 2,
         Texture = 4,
         World1 = 8,
         World2 = 9,

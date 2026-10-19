@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "am7tyqkZ8CoblxZz0PFV8mZhFxfjfNKmmVjtMRVUAH51H3dlqwiXfgg7gXud4WvHMUgfZUWyGXkzri/aSGOY3A==",
+  "dgSpecHash": "in6FZ2dhXyY7mvaIGZdO1Pu9+iJGyfEEM8i6NidPI5QZPdecP3oqZdKdvAB3zlsCU7LS+miwL68313uOZfqHGw==",
   "success": true,
   "projectFilePath": "/home/ictye/Projects/reatest/THSSS-CrossPlatform/THSSS.csproj",
   "expectedPackageFiles": [
@@ -22,7 +22,9 @@
     "/home/ictye/.nuget/packages/silk.net.windowing/2.23.0/silk.net.windowing.2.23.0.nupkg.sha512",
     "/home/ictye/.nuget/packages/silk.net.windowing.common/2.23.0/silk.net.windowing.common.2.23.0.nupkg.sha512",
     "/home/ictye/.nuget/packages/silk.net.windowing.glfw/2.23.0/silk.net.windowing.glfw.2.23.0.nupkg.sha512",
+    "/home/ictye/.nuget/packages/sixlabors.fonts/2.0.8/sixlabors.fonts.2.0.8.nupkg.sha512",
     "/home/ictye/.nuget/packages/sixlabors.imagesharp/3.1.7/sixlabors.imagesharp.3.1.7.nupkg.sha512",
+    "/home/ictye/.nuget/packages/sixlabors.imagesharp.drawing/2.1.5/sixlabors.imagesharp.drawing.2.1.5.nupkg.sha512",
     "/home/ictye/.nuget/packages/system.buffers/4.6.1/system.buffers.4.6.1.nupkg.sha512",
     "/home/ictye/.nuget/packages/system.collections.immutable/10.0.13/system.collections.immutable.10.0.13.nupkg.sha512",
     "/home/ictye/.nuget/packages/system.formats.nrbf/10.0.13/system.formats.nrbf.10.0.13.nupkg.sha512",
@@ -39,66 +41,6 @@
     "/home/ictye/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.31/microsoft.aspnetcore.app.ref.8.0.31.nupkg.sha512"
   ],
   "logs": [
-    {
-      "code": "NU1902",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-gwg2-r3hj-4w44",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known high severity vulnerability, https://github.com/advisories/GHSA-j3p4-wp97-rph4",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known high severity vulnerability, https://github.com/advisories/GHSA-j9gm-c75j-xc9q",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known high severity vulnerability, https://github.com/advisories/GHSA-jjfr-hcj7-qf5w",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
-    {
-      "code": "NU1902",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
-    {
-      "code": "NU1902",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-wmxv-xphr-5c9g",
-      "libraryId": "SixLabors.ImageSharp",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    },
     {
       "code": "NU1701",
       "level": "Warning",

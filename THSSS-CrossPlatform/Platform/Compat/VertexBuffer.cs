@@ -41,8 +41,15 @@ public unsafe class VertexBuffer : IDisposable
         _gl.BufferData(BufferTargetARB.ArrayBuffer, (uint)sizeInBytes, (void*)0, BufferUsageARB.DynamicDraw);
     }
 
+    /// <summary>
+    /// The game passes VertexFormat.None yet fills Lock() with TexturedVertex
+    /// (pos + uv = 20 bytes) and then queries SetStreamSource with the same 20.
+    /// Falling back to 20 keeps GetBufferSubData slices aligned with the writes.
+    /// </summary>
     private int GetStride(VertexFormat format)
     {
+        if (format == VertexFormat.None) return 20;
+
         int stride = 0;
         if ((format & VertexFormat.Position) != 0 || (format & VertexFormat.Xyz) != 0)
             stride += 12; // 3 floats
@@ -54,22 +61,44 @@ public unsafe class VertexBuffer : IDisposable
             stride += 4;
         if ((format & VertexFormat.Texture1) != 0)
             stride += 8; // 2 floats
-        return Math.Max(stride, 16);
+        return stride > 0 ? stride : 20;
     }
 
+    private DataStream _pending;
+    private int _pendingOffset;
+
+    /// <summary>
+    /// Direct3D style lock: the caller writes vertices/indices into the returned
+    /// stream and Unlock() uploads them. Sizing follows the D3D convention where
+    /// zero means "everything from offset to the end".
+    /// </summary>
     public DataStream Lock(int offsetToLock, int sizeToLock, LockFlags flags)
     {
-        return new DataStream(sizeToLock, true, true);
+        int size = sizeToLock > 0 ? sizeToLock : _sizeInBytes - offsetToLock;
+        _pending = new DataStream(Math.Max(0, size), true, true);
+        _pendingOffset = offsetToLock;
+        return _pending;
     }
 
-    public DataStream Lock(LockFlags flags)
-    {
-        return Lock(0, _sizeInBytes, flags);
-    }
+    public DataStream Lock(LockFlags flags) => Lock(0, 0, flags);
 
     public void Unlock()
     {
-        // In OpenGL, unmap the buffer
+        if (_pending == null) return;
+        var bytes = _pending.ToArray();
+        if (bytes.Length > 0)
+        {
+            _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
+            unsafe
+            {
+                fixed (byte* ptr = bytes)
+                {
+                    _gl.BufferSubData(BufferTargetARB.ArrayBuffer, _pendingOffset,
+                        (uint)bytes.Length, ptr);
+                }
+            }
+        }
+        _pending = null;
     }
 
     public void Bind()

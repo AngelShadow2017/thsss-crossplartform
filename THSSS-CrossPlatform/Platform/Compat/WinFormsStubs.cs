@@ -172,7 +172,8 @@ namespace System.Windows.Forms
         public void PerformLayout() { }
         public void ResumeLayout(bool performLayout) { }
         public void SuspendLayout() { }
-        public System.Drawing.Graphics CreateGraphics() => new System.Drawing.Graphics();
+        public System.Drawing.Graphics CreateGraphics()
+            => System.Drawing.Graphics.FromImage(new System.Drawing.Bitmap(Width > 0 ? Width : 1, Height > 0 ? Height : 1));
         public System.Drawing.Point PointToClient(System.Drawing.Point p) => p;
         public System.Drawing.Point PointToScreen(System.Drawing.Point p) => p;
 

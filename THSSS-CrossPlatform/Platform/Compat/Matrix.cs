@@ -15,6 +15,13 @@ namespace SlimDX
             M11 = 1, M22 = 1, M33 = 1, M44 = 1
         };
 
+        /// <summary>Row-major view for System.Numerics based consumers (3D pipeline).</summary>
+        public System.Numerics.Matrix4x4 ToSystemMatrix() => new(
+            M11, M12, M13, M14,
+            M21, M22, M23, M24,
+            M31, M32, M33, M34,
+            M41, M42, M43, M44);
+
         public static Matrix Translation(float x, float y, float z)
         {
             var m = Identity;

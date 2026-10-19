@@ -5,10 +5,13 @@ using SlimDX.DirectInput;
 
 namespace SlimDX.Direct3D9;
 
-public class Device : IDisposable
+public partial class Device : IDisposable
 {
     private BlendingFactor _sourceBlend = BlendingFactor.SrcAlpha;
     private BlendingFactor _destinationBlend = BlendingFactor.OneMinusSrcAlpha;
+    private Device3D _pipeline3D;
+
+    private Device3D Pipeline3D => _pipeline3D ??= new Device3D(GL);
 
     public Device() { }
 
@@ -149,11 +152,45 @@ public class Device : IDisposable
     public void SetTextureStageState(int stage, TextureStage state, TextureOperation value) { }
     public void SetTextureStageState(int stage, TextureStage state, TextureArgument value) { }
     public void SetTextureStageState(int stage, TextureStage state, TextureFilterType value) { }
-    public void SetTexture(int stage, Texture texture) { }
-    public void SetTransform(TransformType type, Matrix matrix) { }
-    public void SetTransform(TransformState type, Matrix matrix) { }
-    public Matrix GetTransform(TransformType type) => Matrix.Identity;
-    public void SetMaterial(ref Material material) { }
+    public void SetTexture(int stage, Texture texture)
+    {
+        if (stage == 0) Pipeline3D.SetTexture(texture);
+    }
+    public void SetTransform(TransformType type, Matrix matrix)
+        => SetTransform((TransformState)(int)type, matrix);
+
+    public void SetTransform(TransformState type, Matrix matrix)
+    {
+        if (type is TransformState.World or TransformState.View or TransformState.Projection)
+            Pipeline3D.SetTransform(type, matrix);
+    }
+
+    /// <summary>D3D's default projection is identity; 3D backgrounds rely on the
+    /// game setting View/World only, so a perspective matrix is installed for
+    /// the first 3D draw of a frame when the game has not set one.</summary>
+    internal void EnsureDefaultProjection()
+    {
+        if (Pipeline3D.Projection == System.Numerics.Matrix4x4.Identity)
+        {
+            float aspect = (float)Math.Max(1, GameWidth) / Math.Max(1, GameHeight);
+            Pipeline3D.SetTransform(TransformState.Projection,
+                Matrix.PerspectiveFovLH(0.7853982f, aspect, 0.1f, 10000f));
+        }
+    }
+    public Matrix GetTransform(TransformType type)
+    {
+        var m = Pipeline3D.Projection;
+        // Only the projection has a synthetic default; the rest round-trip as identity.
+        if (type != TransformType.Projection) return Matrix.Identity;
+        return new Matrix
+        {
+            M11 = m.M11, M12 = m.M12, M13 = m.M13, M14 = m.M14,
+            M21 = m.M21, M22 = m.M22, M23 = m.M23, M24 = m.M24,
+            M31 = m.M31, M32 = m.M32, M33 = m.M33, M34 = m.M34,
+            M41 = m.M41, M42 = m.M42, M43 = m.M43, M44 = m.M44,
+        };
+    }
+    public void SetMaterial(ref Material material) => Material = material;
     public void SetLight(int index, ref Light light) { }
     public void SetLight(int index, Light light) { }
     public void EnableLight(int index, bool enable) { }
@@ -174,11 +211,45 @@ public class Device : IDisposable
     // so these stay no-ops instead of pretending to render.
     public void DrawUserPrimitives<T>(PrimitiveType type, int primitiveCount, T[] data) where T : struct { }
     public void DrawUserPrimitives<T>(PrimitiveType type, int primitiveCount, T[] data, VertexFormat format) where T : struct { }
-    public void DrawPrimitives(PrimitiveType type, int startVertex, int primitiveCount) { }
+    public void DrawPrimitives(PrimitiveType type, int startVertex, int primitiveCount)
+    {
+        EnsureDefaultProjection();
+        ApplyBlendState();
+        Pipeline3D.Draw(type, startVertex, primitiveCount);
+    }
     public void DrawIndexedPrimitives(PrimitiveType type, int baseVertex, int startVertex, int vertexCount, int startIndex, int primitiveCount) { }
-    public void SetStreamSource(int streamNumber, VertexBuffer streamData, int offsetInBytes, int stride) { }
-    public void SetIndices(IndexBuffer indexData) { }
-    public void SetVertexDeclaration(VertexDeclaration declaration) { }
+    public void SetStreamSource(int streamNumber, VertexBuffer streamData, int offsetInBytes, int stride)
+    {
+        _streamOffset = offsetInBytes;
+        Pipeline3D.SetStreamSource(streamData);
+    }
+
+    private int _streamOffset;
+
+    /// <summary>Blend factor currently requested through SetRenderState.</summary>
+    internal BlendingFactor CurrentSourceBlend => _sourceBlend;
+    internal BlendingFactor CurrentDestinationBlend => _destinationBlend;
+
+    /// <summary>Applies the blend mode the game configured for the next draw.</summary>
+    internal void ApplyBlendState()
+    {
+        GL.Enable(Silk.NET.OpenGL.EnableCap.Blend);
+        GL.BlendFunc(_sourceBlend, _destinationBlend);
+    }
+
+    /// <summary>Resets blend to the sprite batcher's default (SrcAlpha/1-SrcAlpha).</summary>
+    internal void ResetBlendState()
+    {
+        _sourceBlend = BlendingFactor.SrcAlpha;
+        _destinationBlend = BlendingFactor.OneMinusSrcAlpha;
+        GL.BlendFunc(_sourceBlend, _destinationBlend);
+    }
+    public void SetIndices(IndexBuffer indexData) => Pipeline3D.SetIndices(indexData);
+    public void SetVertexDeclaration(VertexDeclaration declaration)
+    {
+        VertexDeclaration = declaration;
+        Pipeline3D.SetVertexDeclaration(declaration);
+    }
     public void SetVertexShader(VertexShader shader) { }
     public void SetPixelShader(PixelShader shader) { }
     public void SetFVF(VertexFormat format) { }

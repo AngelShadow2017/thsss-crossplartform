@@ -63,8 +63,11 @@ public class Sprite : IDisposable
     {
         _batchCount = 0;
         _currentTexture = 0;
+        // Blend factors were just set by the 3D pass (D3D keeps them as device
+        // state); honour them here instead of forcing alpha blending, then reset
+        // so later sprites use the classic SrcAlpha/1-SrcAlpha.
         _gl.Enable(Silk.NET.OpenGL.EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.BlendFunc(_device.CurrentSourceBlend, _device.CurrentDestinationBlend);
         _gl.Disable(Silk.NET.OpenGL.EnableCap.DepthTest);
         _gl.Disable(Silk.NET.OpenGL.EnableCap.CullFace);
     }
@@ -177,6 +180,7 @@ public class Sprite : IDisposable
 
         _gl.BindVertexArray(0);
         _gl.UseProgram(0);
+        _device.ResetBlendState();
         _batchCount = 0;
     }
 

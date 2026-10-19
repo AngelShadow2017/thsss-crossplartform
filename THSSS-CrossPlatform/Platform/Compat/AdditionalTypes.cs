@@ -38,22 +38,101 @@ namespace SlimDX
     }
 
     // DataStream
+    //
+    // The original game locks a VertexBuffer, writes vertices into the stream and
+    // unlocks. That only works if the stream actually accumulates bytes, so this
+    // keeps a real buffer and a real position pointer.
     public class DataStream : IDisposable
     {
         private byte[] _data;
-        public DataStream(int size, bool canRead, bool canWrite) { _data = new byte[size]; }
-        public DataStream(byte[] data, bool canRead, bool canWrite) { _data = data; }
-        public DataStream(IntPtr data, int size, bool canRead, bool canWrite) { _data = new byte[size]; }
+        private int _position;
+
+        public DataStream(int size, bool canRead, bool canWrite)
+            => _data = new byte[Math.Max(0, size)];
+
+        public DataStream(byte[] data, bool canRead, bool canWrite)
+            => _data = data ?? Array.Empty<byte>();
+
+        public DataStream(IntPtr data, int size, bool canRead, bool canWrite)
+            => _data = new byte[Math.Max(0, size)];
+
+        /// <summary>Bytes written so far (or the whole buffer for caller-owned arrays).</summary>
+        public byte[] ToArray() => _data;
+
         public void Dispose() { }
-        public void Write<T>(T value) where T : struct { }
-        public void WriteRange<T>(T[] values) where T : struct { }
-        public void WriteRange(IntPtr source, int size) { }
-        public void ReadRange<T>(T[] values) where T : struct { }
-        public T Read<T>() where T : struct => default(T);
-        public byte[] ReadBytes(int count) => new byte[count];
-        public long Position { get; set; }
+
+        public void Write<T>(T value) where T : unmanaged
+        {
+            int size = System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            Ensure(size);
+            System.Runtime.InteropServices.MemoryMarshal.Write(_data.AsSpan(_position, size), in value);
+            _position += size;
+        }
+
+        public void WriteRange<T>(T[] values) where T : unmanaged
+        {
+            if (values == null || values.Length == 0) return;
+            int size = values.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            Ensure(size);
+            var span = _data.AsSpan(_position, size);
+            for (int i = 0; i < values.Length; i++)
+                System.Runtime.InteropServices.MemoryMarshal.Write(
+                    span.Slice(i * System.Runtime.InteropServices.Marshal.SizeOf<T>()), in values[i]);
+            _position += size;
+        }
+
+        public void WriteRange(IntPtr source, int size)
+        {
+            Ensure(size);
+            System.Runtime.InteropServices.Marshal.Copy(source, _data, _position, size);
+            _position += size;
+        }
+
+        public void ReadRange<T>(T[] values) where T : unmanaged
+        {
+            if (values == null || values.Length == 0) return;
+            int size = values.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            if (_position + size > _data.Length) return;
+            var span = _data.AsSpan(_position, size);
+            for (int i = 0; i < values.Length; i++)
+            {
+                int offset = i * System.Runtime.InteropServices.Marshal.SizeOf<T>();
+                values[i] = System.Runtime.InteropServices.MemoryMarshal.Read<T>(span.Slice(offset));
+            }
+            _position += size;
+        }
+
+        public T Read<T>() where T : unmanaged
+        {
+            int size = System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            if (_position + size > _data.Length) return default;
+            var value = System.Runtime.InteropServices.MemoryMarshal.Read<T>(_data.AsSpan(_position, size));
+            _position += size;
+            return value;
+        }
+
+        public byte[] ReadBytes(int count)
+        {
+            count = Math.Clamp(count, 0, Math.Max(0, _data.Length - _position));
+            var result = _data.AsSpan(_position, count).ToArray();
+            _position += count;
+            return result;
+        }
+
+        public long Position
+        {
+            get => _position;
+            set => _position = (int)Math.Clamp(value, 0, _data.Length);
+        }
+
         public long Length => _data?.Length ?? 0;
         public IntPtr DataPointer => IntPtr.Zero;
+
+        private void Ensure(int size)
+        {
+            if (_position + size <= _data.Length) return;
+            Array.Resize(ref _data, _position + size);
+        }
     }
 
     // Result
@@ -81,16 +160,17 @@ namespace System.Drawing
     // Game code uses SlimDX.Direct3D9.Color via using directives
 
 
-    public class Font
+    public class Font : IDisposable
     {
         public string Name { get; set; }
         public float Size { get; set; }
         public FontStyle Style { get; set; }
+        public GraphicsUnit Unit { get; set; }
         public Font(string name, float size) { Name = name; Size = size; }
         public Font(string name, float size, FontStyle style) { Name = name; Size = size; Style = style; }
-        public Font(string name, float size, GraphicsUnit unit) { Name = name; Size = size; }
-        public Font(string name, float size, FontStyle style, GraphicsUnit unit) { Name = name; Size = size; Style = style; }
-        public void DrawString(string text, Font font, Brush brush, float x, float y) { }
+        public Font(string name, float size, GraphicsUnit unit) { Name = name; Size = size; Unit = unit; }
+        public Font(string name, float size, FontStyle style, GraphicsUnit unit)
+        { Name = name; Size = size; Style = style; Unit = unit; }
         public void Dispose() { }
     }
 
@@ -142,60 +222,95 @@ namespace System.Drawing
         public int Width { get; set; }
         public int Height { get; set; }
         public Imaging.PixelFormat PixelFormat { get; set; }
+
+        /// <summary>
+        /// BGRA, top-down row order, matching what System.Drawing exposed through
+        /// LockBits. Text rasterised by Graphics ends up here and is uploaded to a
+        /// texture, so this buffer is what the game actually displays.
+        /// </summary>
+        internal byte[] Pixels;
+
         public static Image FromFile(string filename) => new Bitmap(filename);
         public void Dispose() { }
     }
     public class Bitmap : Image
     {
-        public Bitmap() { Width = 0; Height = 0; }
-        public Bitmap(int width, int height) { Width = width; Height = height; }
-        public Bitmap(int width, int height, System.Drawing.Imaging.PixelFormat format) { Width = width; Height = height; }
+        public Bitmap() { Width = 0; Height = 0; Pixels = Array.Empty<byte>(); }
+        public Bitmap(int width, int height) : this(width, height, Imaging.PixelFormat.Format32bppArgb) { }
+        public Bitmap(int width, int height, System.Drawing.Imaging.PixelFormat format)
+        {
+            Width = width; Height = height; PixelFormat = format;
+            Pixels = new byte[Math.Max(0, width) * Math.Max(0, height) * 4];
+        }
+
         public Bitmap(string filename)
         {
-            var info = SixLabors.ImageSharp.Image.Identify(filename);
-            Width = info.Width;
-            Height = info.Height;
+            using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(filename);
+            Load(image);
         }
 
         public Bitmap(Stream stream)
         {
-            var info = SixLabors.ImageSharp.Image.Identify(stream);
-            Width = info.Width;
-            Height = info.Height;
+            using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(stream);
+            Load(image);
         }
+
+        private void Load(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Bgra32> image)
+        {
+            Width = image.Width;
+            Height = image.Height;
+            PixelFormat = Imaging.PixelFormat.Format32bppArgb;
+            Pixels = new byte[Width * Height * 4];
+            image.CopyPixelDataTo(Pixels);
+        }
+
         public void SetResolution(float xDpi, float yDpi) { }
+
+        /// <summary>Pins the managed pixel buffer so callers can read it via Scan0.</summary>
         public BitmapData LockBits(Rectangle rect, Imaging.ImageLockMode mode, Imaging.PixelFormat format)
-            => new BitmapData();
-        public void UnlockBits(BitmapData data) { }
-        public Color GetPixel(int x, int y) => Color.Empty;
-        public void SetPixel(int x, int y, Color color) { }
+        {
+            var handle = System.Runtime.InteropServices.GCHandle.Alloc(Pixels,
+                System.Runtime.InteropServices.GCHandleType.Pinned);
+            _locks.Add(handle);
+            return new BitmapData
+            {
+                Scan0 = handle.AddrOfPinnedObject(),
+                Stride = Width * 4,
+                Width = Width,
+                Height = Height,
+                PixelFormat = format,
+            };
+        }
+
+        private readonly List<System.Runtime.InteropServices.GCHandle> _locks = new();
+
+        public void UnlockBits(BitmapData data)
+        {
+            if (_locks.Count == 0) return;
+            var handle = _locks[_locks.Count - 1];
+            _locks.RemoveAt(_locks.Count - 1);
+            handle.Free();
+        }
+
+        public Color GetPixel(int x, int y)
+        {
+            if (x < 0 || y < 0 || x >= Width || y >= Height) return Color.Empty;
+            int i = (y * Width + x) * 4;
+            return Color.FromArgb(Pixels[i + 3], Pixels[i + 2], Pixels[i + 1], Pixels[i]);
+        }
+
+        public void SetPixel(int x, int y, Color color)
+        {
+            if (x < 0 || y < 0 || x >= Width || y >= Height) return;
+            int i = (y * Width + x) * 4;
+            Pixels[i] = (byte)color.B;
+            Pixels[i + 1] = (byte)color.G;
+            Pixels[i + 2] = (byte)color.R;
+            Pixels[i + 3] = (byte)color.A;
+        }
     }
 
-    public class Graphics : IDisposable
-    {
-        public static Graphics FromImage(Image img) => new Graphics();
-        public void Clear(Color color) { }
-        public Text.TextRenderingHint TextRenderingHint { get; set; }
-        public void DrawString(string text, Font font, Brush brush, float x, float y) { }
-        public void DrawString(string text, Font font, Brush brush, float x, float y, StringFormat format) { }
-        public void DrawString(string text, Font font, Brush brush, RectangleF rect) { }
-        public void DrawLine(Pen pen, float x1, float y1, float x2, float y2) { }
-        public void DrawRectangle(Pen pen, float x, float y, float w, float h) { }
-        public void DrawRectangle(Pen pen, Rectangle rect) { }
-        public void FillRectangle(Brush brush, float x, float y, float w, float h) { }
-        public void FillRectangle(Brush brush, Rectangle rect) { }
-        public void DrawEllipse(Pen pen, float x, float y, float w, float h) { }
-        public void FillEllipse(Brush brush, float x, float y, float w, float h) { }
-        public void DrawImage(Image image, float x, float y) { }
-        public void DrawImage(Image image, Rectangle dest, Rectangle src, GraphicsUnit unit) { }
-        public void DrawImage(Image image, Rectangle dest) { }
-        public void DrawImage(Image image, float x, float y, float w, float h) { }
-        public void TranslateTransform(float dx, float dy) { }
-        public void ScaleTransform(float sx, float sy) { }
-        public void RotateTransform(float angle) { }
-        public void ResetTransform() { }
-        public void Dispose() { }
-    }
+    // Graphics lives in GraphicsText.cs (real ImageSharp text rasteriser).
 
     public class StringFormat : IDisposable
     {
