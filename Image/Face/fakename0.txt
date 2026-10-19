@@ -1,0 +1,7 @@
+﻿ename_Ami	0	0	121	48	0	0
+ename_Rakuki	0	50	124	49	0	0
+ename_Seiryuu	0	100	121	48	0	0
+ename_Kage	0	150	124	50	0	0
+ename_Rakukun	0	200	139	48	0	0
+ename_Tensei	121	0	134	50	0	0
+ename_Rika	128	50	122	48	0	0

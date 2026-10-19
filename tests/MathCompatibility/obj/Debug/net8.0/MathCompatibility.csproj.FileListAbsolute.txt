@@ -1,0 +1,14 @@
+/home/ictye/Projects/reatest/tests/MathCompatibility/bin/Debug/net8.0/MathCompatibility
+/home/ictye/Projects/reatest/tests/MathCompatibility/bin/Debug/net8.0/MathCompatibility.deps.json
+/home/ictye/Projects/reatest/tests/MathCompatibility/bin/Debug/net8.0/MathCompatibility.runtimeconfig.json
+/home/ictye/Projects/reatest/tests/MathCompatibility/bin/Debug/net8.0/MathCompatibility.dll
+/home/ictye/Projects/reatest/tests/MathCompatibility/bin/Debug/net8.0/MathCompatibility.pdb
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.GeneratedMSBuildEditorConfig.editorconfig
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.AssemblyInfoInputs.cache
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.AssemblyInfo.cs
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.csproj.CoreCompileInputs.cache
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.dll
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/refint/MathCompatibility.dll
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.pdb
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/MathCompatibility.genruntimeconfig.cache
+/home/ictye/Projects/reatest/tests/MathCompatibility/obj/Debug/net8.0/ref/MathCompatibility.dll

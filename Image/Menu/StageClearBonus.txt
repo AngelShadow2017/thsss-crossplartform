@@ -1,0 +1,2 @@
+StageClear	0	0	256	64	0	0	8
+ClearBonus	0	64	256	64	0	0	0

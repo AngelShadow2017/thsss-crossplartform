@@ -1,0 +1,2 @@
+FaceReimu_no2	0	0	394	550	0	0
+FaceReimu_an2	630	474	394	550	0	0

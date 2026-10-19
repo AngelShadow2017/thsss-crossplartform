@@ -1,0 +1,8 @@
+GhostFire_0	0	0	48	64	0	0
+GhostFire_1	48	0	48	64	0	0
+GhostFire_2	96	0	48	64	0	0
+GhostFire_3	144	0	48	64	0	0
+GhostFire_4	192	0	48	64	0	0
+GhostFire_5	240	0	48	64	0	0
+GhostFire_6	288	0	48	64	0	0
+GhostFire_7	336	0	48	64	0	0

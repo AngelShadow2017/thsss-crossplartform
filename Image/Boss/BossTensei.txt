@@ -1,0 +1,12 @@
+BossTensei-00	0	0	64	80	0	0
+BossTensei-01	64	0	64	80	0	0
+BossTensei-02	128	0	64	80	0	0
+BossTensei-03	192	0	64	80	0	0
+BossTensei-10	0	80	64	80	0	0
+BossTensei-11	64	80	64	80	0	0
+BossTensei-12	128	80	64	80	0	0
+BossTensei-13	192	80	64	80	0	0
+BossTensei-20	0	160	64	80	0	0
+BossTensei-21	64	160	64	80	0	0
+BossTensei-22	128	160	64	80	0	0
+BossTensei-23	192	160	64	80	0	0

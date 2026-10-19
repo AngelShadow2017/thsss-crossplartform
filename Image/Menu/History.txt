@@ -1,0 +1,16 @@
+History_MarisaA	0	0	210	25	0	0
+History_SanaeA	0	25	210	25	0	0
+History_ReimuA	0	75	210	25	0	0
+History_KoishiA	0	50	210	25	0	0
+History_Easy	0	100	54	25	0	0
+History_Normal	0	125	74	25	0	0
+History_Hard	0	150	54	25	0	0
+History_Lunatic	0	175	88	25	0	0
+History_Ultra	0	200	66	25	0	0
+History_Extra	0	225	66	25	0	0
+History_游戏次数	0	250	98	25	0	0
+History_游戏时间	0	275	98	25	0	0
+History_通关次数	0	300	98	25	0	0
+History_无续关通关次数	0	325	164	25	0	0
+History_切换	0	350	396	25	0	0
+History_Arrow	0	496	16	16	0	0

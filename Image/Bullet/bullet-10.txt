@@ -1,0 +1,8 @@
+sijiao0	0	0	64	64	0	0
+sijiao1	64	0	64	64	0	0
+sijiao2	128	0	64	64	0	0
+sijiao3	192	0	64	64	0	0
+sijiao4	256	0	64	64	0	0
+sijiao5	320	0	64	64	0	0
+sijiao6	384	0	64	64	0	0
+sijiao7	448	0	64	64	0	0

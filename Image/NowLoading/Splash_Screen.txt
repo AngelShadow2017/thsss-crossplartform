@@ -1,0 +1,1 @@
+Splash_Screen	0	0	640	480	0	0

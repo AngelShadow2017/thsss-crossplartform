@@ -1,0 +1,31 @@
+using System.Drawing;
+
+namespace Shooting;
+
+internal class SpellCard_SSSEx_01C : BaseSpellCard
+{
+	public SpellCard_SSSEx_01C(StageDataPackage StageData)
+		: base(StageData)
+	{
+		base.SC_Name = "冬临「初雪之寒径」";
+		base.BaseScore = 40000000L;
+		base.Boss.DestPoint = new Point(base.BoundRect.Width / 2, 224);
+		base.Boss.Velocity = 4f;
+		StageData.SoundPlay("se_cat00.wav");
+		new BulletTitle(StageData, base.SC_Name);
+		new SpellCardAttack(StageData);
+		new FullPic2(StageData, "FaceRika_ct2");
+		new BackgroundBossEx(StageData);
+	}
+
+	public override void Shoot()
+	{
+		base.Boss.Armon = base.Boss.ArmonArray[1];
+		if (base.Time == 100)
+		{
+			string fileName = ".\\CS\\StEx\\关底Boss\\1符2.mbg";
+			CS_Data cSData = base.StageData.LoadCS(fileName);
+			new CSEmitterController(base.StageData, cSData);
+		}
+	}
+}

@@ -1,0 +1,61 @@
+using System;
+using System.Drawing;
+
+namespace Shooting;
+
+public class Spell_Sanae : BaseSpell
+{
+	public Spell_Sanae(StageDataPackage StageData)
+	{
+		base.StageData = StageData;
+		base.Position = base.MyPlane.Position;
+		base.Damage = 36;
+		base.Region = 4;
+		base.LifeTime = 300;
+		base.ScaleVelocity = 0.1f;
+		base.MaxScale = 200f;
+		new BackgroundBlack(StageData, base.Position);
+		StageData.SoundPlay("se_cat00.wav");
+		StageData.SoundPlay("se_nep00.wav");
+		base.SpellList.Add(this);
+	}
+
+	public override void Ctrl()
+	{
+		base.Ctrl();
+		if (base.Time == 1)
+		{
+			BaseEffect baseEffect = new BaseEffect(base.StageData, "球", base.Position, 0f, 0.0);
+			baseEffect.ScaleWidth = 0.05f;
+			baseEffect.ScaleLength = 0.05f;
+			BaseEffect baseEffect2 = baseEffect;
+			baseEffect2.ScaleLengthVelocityDictionary.Add(1, 1f / 60f);
+			baseEffect2.ScaleWidthVelocityDictionary.Add(1, 1f / 60f);
+			baseEffect2.ScaleLengthVelocityDictionary.Add(120, 1.25f);
+			baseEffect2.ScaleWidthVelocityDictionary.Add(120, 1.25f);
+			baseEffect2.TransparentVelocityDictionary.Add(120, -10f);
+			baseEffect2.AngularVelocityDegree = 10f;
+		}
+		else if (base.Time == 120)
+		{
+			base.StageData.SoundPlay("se_cat00.wav");
+			new EmitterGiveOutEnegy3D(base.StageData, base.OriginalPosition, Color.Green);
+			base.StageData.VibrateStart(base.LifeTime - base.Time);
+			base.ScaleVelocity = 10f;
+		}
+		else if (120 < base.Time && base.Time <= 170)
+		{
+			base.AngularVelocityDegree = 2.5f;
+			BaseEffect baseEffect3 = new BaseEffect(base.StageData, "bullet50_5", base.Position, 7f, -Math.PI / 2.0 + base.Angle);
+			baseEffect3.ScaleLength = 15f;
+			baseEffect3.ScaleWidth = 0.3f;
+			BaseEffect baseEffect4 = new BaseEffect(base.StageData, "bullet50_5", base.Position, 7f, -Math.PI / 2.0 - base.Angle);
+			baseEffect4.ScaleLength = 15f;
+			baseEffect4.ScaleWidth = 0.3f;
+		}
+		else if (base.Time == 240)
+		{
+			base.Damage = 0;
+		}
+	}
+}

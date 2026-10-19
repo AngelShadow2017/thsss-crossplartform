@@ -1,0 +1,6 @@
+Menu_Manual01	20	30	100	30	0	0
+Menu_Manual02	20	60	100	30	0	0
+Menu_Manual03	20	90	100	30	0	0
+Menu_Manual04	20	120	100	30	0	0
+Menu_Manual05	20	150	100	30	0	0
+Menu_Manual06	20	180	100	30	0	0

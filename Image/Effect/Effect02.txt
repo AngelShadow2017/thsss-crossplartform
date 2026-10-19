@@ -1,0 +1,7 @@
+SpellCircle00	0	0	16	128	0	0
+SpellCircle01	16	0	16	128	0	0
+SpellCircle02	32	0	16	128	0	0
+SpellCircle03	48	0	16	128	0	0
+SpellCircle04	64	0	16	128	0	0
+SpellCircle05	80	0	16	128	0	0
+SpellCircle06	96	0	16	128	0	0

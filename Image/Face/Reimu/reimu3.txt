@@ -1,0 +1,2 @@
+FaceReimu_sw	0	0	394	550	0	0
+FaceReimu_me	482	482	542	542	0	0

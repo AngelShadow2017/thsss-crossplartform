@@ -1,0 +1,12 @@
+BossKage-00	0	0	64	80	0	0
+BossKage-01	64	0	64	80	0	0
+BossKage-02	128	0	64	80	0	0
+BossKage-03	192	0	64	80	0	0
+BossKage-10	0	80	64	80	0	0
+BossKage-11	64	80	64	80	0	0
+BossKage-12	128	80	64	80	0	0
+BossKage-13	192	80	64	80	0	0
+BossKage-20	0	160	64	80	0	0
+BossKage-21	64	160	64	80	0	0
+BossKage-22	128	160	64	80	0	0
+BossKage-23	192	160	64	80	0	0

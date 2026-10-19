@@ -1,0 +1,8 @@
+MenuTitle_RankSelect	80	20	370	180	0	0
+MenuTitle_PlayerSelect	80	223	370	180	0	0
+MenuTitle_Replay	80	433	370	180	0	0
+MenuTitle_StageSelect	80	670	370	180	0	0
+MenuTitle_Manual	500	20	370	180	0	0
+MenuTitle_MusicRoom	500	223	370	180	0	0
+MenuTitle_PlayerData	500	433	370	180	0	0
+MenuTitle_Option	500	670	370	180	0	0

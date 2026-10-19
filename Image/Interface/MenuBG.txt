@@ -1,0 +1,1 @@
+MenuBackground	0	0	1024	768	0	0

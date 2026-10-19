@@ -1,0 +1,10 @@
+Crazy Storm Data 1.01
+1 Sounds:
+1_tan00.wav_10
+Center:315,240,0,0,0,0,
+Totalframe:99999
+Layer1:新图层 ,1,99999,1,0,0,0,0
+0,0,False,-1,False,,416,4,3473,1340,-99998,-99998,0,0,{X:0 Y:0},1,20,110,{X:0 Y:0},360,0,0,{X:0 Y:0},0,0,{X:0 Y:0},200,75,0.5,6,255,255,255,100,0,{X:0 Y:0},True,5,0,{X:0 Y:0},0,0,{X:0 Y:0},1,1,True,True,True,False,False,False,新事件组|85|85|当前帧=1：周期减少1，正比，1帧;&,,270,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,True,True,True,False,False,0,,False,0,5,0,False,,10,0,0,0,False,0,0,0,0,bullet15_5,0,1,0
+Layer2:empty
+Layer3:empty
+Layer4:empty
