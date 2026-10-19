@@ -32,8 +32,12 @@ internal sealed class Device3D : IDisposable
     private Material _material;
     private Texture _texture0;
 
-    internal Device3D(GL gl)
+    private readonly Device _device;
+    private bool _depthTest;
+
+    internal Device3D(Device device, GL gl)
     {
+        _device = device;
         _gl = gl;
         for (int i = 0; i < _transforms.Length; i++) _transforms[i] = Matrix4x4.Identity;
         CreateProgram();
@@ -51,7 +55,11 @@ uniform mat4 uProjection;
 out vec2 TexCoord;
 void main()
 {
-    gl_Position = uProjection * uView * uWorld * vec4(aPosition, 1.0);
+    vec4 clip = uProjection * uView * uWorld * vec4(aPosition, 1.0);
+    // The game's 3D cameras look along -Z with +Y up, while GL clip space is the
+    // same orientation, so no flip is needed here; the sprite layer already
+    // accounts for its own screen-space Y.
+    gl_Position = clip;
     TexCoord = aTexCoord;
 }";
 
@@ -120,6 +128,7 @@ void main()
     internal void SetIndices(IndexBuffer indices) => _indices = indices;
     internal void SetMaterial(Material material) => _material = material;
     internal void SetTexture(Texture texture) => _texture0 = texture;
+    internal void SetDepthTest(bool enabled) => _depthTest = enabled;
 
     /// <summary>
     /// Reads the bound vertex buffer back from OpenGL. The game's models upload
@@ -128,9 +137,21 @@ void main()
     /// </summary>
     private float[] _scratch = Array.Empty<float>();
 
+    internal static int DrawCalls;
+    internal static int SkippedNoStream;
+
     internal unsafe void Draw(PrimitiveType type, int startVertex, int primitiveCount)
     {
-        if (_stream == null || _stream.Handle == 0 || primitiveCount <= 0) return;
+        if (_stream == null || _stream.Handle == 0 || primitiveCount <= 0)
+        {
+            if (Environment.GetEnvironmentVariable("THSSS_DIAG3D") == "1")
+                Console.WriteLine($"[3D] skip: stream={_stream != null} handle={_stream?.Handle} count={primitiveCount}");
+            SkippedNoStream++;
+            return;
+        }
+        DrawCalls++;
+        if (Environment.GetEnvironmentVariable("THSSS_DIAG3D") == "1" && DrawCalls < 20)
+            Console.WriteLine($"[3D] draw type={type} start={startVertex} prims={primitiveCount} stride={_stream.Stride} tex={_texture0?.Handle}");
 
         var glType = ToGlPrimitive(type);
         int vertexCount = VerticesFor(type, primitiveCount);
@@ -162,6 +183,14 @@ void main()
 
         Upload(floatCount: floats);
 
+        // The 3D pass shares GL state with the sprite batcher. Blending must follow
+        // the D3D state the game set, and depth must not reject everything.
+        _gl.Enable(Silk.NET.OpenGL.EnableCap.Blend);
+        _gl.BlendFunc(_device.CurrentSourceBlend, _device.CurrentDestinationBlend);
+        _gl.Disable(Silk.NET.OpenGL.EnableCap.CullFace);
+        if (_depthTest) { _gl.Enable(Silk.NET.OpenGL.EnableCap.DepthTest); _gl.DepthFunc(DepthFunction.Lequal); }
+        else _gl.Disable(Silk.NET.OpenGL.EnableCap.DepthTest);
+
         _gl.UseProgram(_program);
         UploadMatrix(_transformLocation, World);
         UploadMatrix(_viewLocation, View);
@@ -177,11 +206,47 @@ void main()
             _gl.Uniform1(_textureLocation, 0);
         }
 
+        // Render into the current target's viewport, using the same letterbox as
+        // the sprite batcher so 3D content lines up with the 2D layers.
+        var target = _device.RenderTarget;
+        int vw = target?.Width ?? Math.Max(1, _device.FramebufferWidth);
+        int vh = target?.Height ?? Math.Max(1, _device.FramebufferHeight);
+        var (vx, vy, vpW, vpH) = FitLogical(vw, vh);
+        _gl.Viewport(vx, vy, (uint)vpW, (uint)vpH);
+
+        if (Environment.GetEnvironmentVariable("THSSS_DIAG3D") == "1" && DrawCalls < 6)
+        {
+            // Log the clip-space position of the first vertex to tell "culled" from
+            // "not drawn": a value outside [-w, w] means it left the frustum.
+            var p0 = new System.Numerics.Vector4(
+                _scratch[0], _scratch[1], _scratch[2], 1f);
+            var clip = System.Numerics.Vector4.Transform(
+                System.Numerics.Vector4.Transform(
+                    System.Numerics.Vector4.Transform(p0, World), View), Projection);
+            float ndcX = clip.W != 0 ? clip.X / clip.W : 0f;
+            float ndcY = clip.W != 0 ? clip.Y / clip.W : 0f;
+            Console.WriteLine($"[3D] clip=({clip.X:F1},{clip.Y:F1},{clip.Z:F1},{clip.W:F1}) ndc=({ndcX:F2},{ndcY:F2}) uv=({_scratch[3]:F2},{_scratch[4]:F2})");
+            if (DrawCalls == 1)
+            {
+                Console.WriteLine("[3D] proj=" + string.Join(',', new[] {
+                    Projection.M11, Projection.M22, Projection.M33, Projection.M34, Projection.M43, Projection.M44 }));
+                Console.WriteLine("[3D] view=" + string.Join(',', new[] {
+                    View.M11, View.M22, View.M33, View.M43 }));
+                Console.WriteLine("[3D] vtx=" + string.Join(',', new[] { _scratch[0], _scratch[1], _scratch[2] }));
+            }
+        }
+
         _gl.BindVertexArray(_vao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
         _gl.DrawArrays(glType, 0, (uint)vertexCount);
         _gl.BindVertexArray(0);
         _gl.UseProgram(0);
+
+        if (Environment.GetEnvironmentVariable("THSSS_DIAG3D") == "1" && DrawCalls < 6)
+        {
+            var err = _gl.GetError();
+            Console.WriteLine($"[3D] after vp={vpW}x{vpH} err={err} world={World.M41},{World.M42},{World.M43} view={View.M41},{View.M42},{View.M43}");
+        }
     }
 
     private unsafe void Upload(int floatCount)
@@ -202,13 +267,29 @@ void main()
     private void UploadMatrix(int location, Matrix4x4 m)
     {
         if (location < 0) return;
+
+        // The game builds row-vector matrices (translation in M41..M43) while the
+        // shader multiplies column vectors, so the transpose is what makes the
+        // camera translation actually move geometry instead of the W component.
         Span<float> values = stackalloc float[16];
-        // Row-major input, column-major uniform (transpose = true).
         values[0] = m.M11; values[1] = m.M21; values[2] = m.M31; values[3] = m.M41;
         values[4] = m.M12; values[5] = m.M22; values[6] = m.M32; values[7] = m.M42;
         values[8] = m.M13; values[9] = m.M23; values[10] = m.M33; values[11] = m.M43;
         values[12] = m.M14; values[13] = m.M24; values[14] = m.M34; values[15] = m.M44;
         _gl.UniformMatrix4(location, 1, false, values);
+    }
+
+    private (int X, int Y, int Width, int Height) FitLogical(int width, int height)
+    {
+        float logical = (float)_device.GameWidth / Math.Max(1, _device.GameHeight);
+        float actual = (float)width / Math.Max(1, height);
+        if (actual > logical)
+        {
+            int scaled = (int)(height * logical);
+            return ((width - scaled) / 2, 0, scaled, height);
+        }
+        int scaledH = (int)(width / logical);
+        return (0, (height - scaledH) / 2, width, scaledH);
     }
 
     private static Silk.NET.OpenGL.PrimitiveType ToGlPrimitive(PrimitiveType type) => type switch

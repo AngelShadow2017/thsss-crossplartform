@@ -11,7 +11,7 @@ public partial class Device : IDisposable
     private BlendingFactor _destinationBlend = BlendingFactor.OneMinusSrcAlpha;
     private Device3D _pipeline3D;
 
-    private Device3D Pipeline3D => _pipeline3D ??= new Device3D(GL);
+    private Device3D Pipeline3D => _pipeline3D ??= new Device3D(this, GL);
 
     public Device() { }
 
@@ -95,6 +95,7 @@ public partial class Device : IDisposable
                 break;
             case RenderState.ZEnable:
                 SetCapability(Silk.NET.OpenGL.EnableCap.DepthTest, value != 0);
+                Pipeline3D.SetDepthTest(value != 0);
                 break;
             case RenderState.ScissorTestEnable:
                 SetCapability(Silk.NET.OpenGL.EnableCap.ScissorTest, value != 0);
@@ -168,14 +169,14 @@ public partial class Device : IDisposable
     /// <summary>D3D's default projection is identity; 3D backgrounds rely on the
     /// game setting View/World only, so a perspective matrix is installed for
     /// the first 3D draw of a frame when the game has not set one.</summary>
+    /// <summary>
+    /// Direct3D's default projection is the identity, which is what the original
+    /// build used until a stage installed its own. Installing a synthetic
+    /// perspective here changed the intended transform for the 3D backgrounds,
+    /// so the projection is left exactly as the game sets it.
+    /// </summary>
     internal void EnsureDefaultProjection()
     {
-        if (Pipeline3D.Projection == System.Numerics.Matrix4x4.Identity)
-        {
-            float aspect = (float)Math.Max(1, GameWidth) / Math.Max(1, GameHeight);
-            Pipeline3D.SetTransform(TransformState.Projection,
-                Matrix.PerspectiveFovLH(0.7853982f, aspect, 0.1f, 10000f));
-        }
     }
     public Matrix GetTransform(TransformType type)
     {
