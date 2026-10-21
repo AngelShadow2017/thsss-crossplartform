@@ -1,0 +1,7 @@
+reference/original/*.exe filter=lfs diff=lfs merge=lfs -text
+reference/original/*.dll filter=lfs diff=lfs merge=lfs -text
+game/**/*.wav filter=lfs diff=lfs merge=lfs -text
+game/**/*.png filter=lfs diff=lfs merge=lfs -text
+game/**/*.bmp filter=lfs diff=lfs merge=lfs -text
+game/**/*.x filter=lfs diff=lfs merge=lfs -text
+game/**/*.rpy filter=lfs diff=lfs merge=lfs -text
