@@ -60,9 +60,17 @@ void Triangle(float z,D3DColor colour)
     device.Material=new Material{Diffuse=colour};
     device.DrawPrimitives(SlimDX.Direct3D9.PrimitiveType.TriangleList,0,1);
 }
+device.SetRenderState(RenderState.ZEnable,false);
+Console.WriteLine($"[NODEPTH] target={device.GetRenderTarget(0)?.Width} stream={100}");
+Triangle(0.2f,new D3DColor(1f,0f,0f,1f));
+Console.WriteLine($"[NODEPTH] red={string.Join(',',Pixel(32,32))}");
+device.SetRenderState(RenderState.ZEnable,true);
+device.Clear(ClearFlags.Target|ClearFlags.ZBuffer,System.Drawing.Color.Black,1,0);
 Triangle(0.2f,new D3DColor(1f,0f,0f,1f));
 Triangle(0.8f,new D3DColor(0f,0f,1f,1f));
+Console.WriteLine($"[DEPTH] fbo={surface.FBO} drawfb={gl.GetInteger(GLEnum.DrawFramebufferBinding)} depthTest={gl.IsEnabled(Silk.NET.OpenGL.EnableCap.DepthTest)} depthMask={(byte)gl.GetInteger(GLEnum.DepthWritemask)} err={gl.GetError()}");
 var depthPixel=Pixel(32,32);
+Console.WriteLine($"[DEPTH] pixel={string.Join(',',depthPixel)}");
 Assert(depthPixel[0]>240 && depthPixel[2]<15,$"depth retains nearer red over farther blue: actual={string.Join(',',depthPixel)}");
 device.SetRenderTarget(0,null);
 Console.WriteLine("PASS: former shader audit defects now enforced as regression assertions");
@@ -83,6 +91,12 @@ Assert(Pixel(32,32)[0]>240 && Pixel(8,32)[2]>240,"local viewport preserves outsi
 device.Viewport=new Viewport(0,0,64,64,0,1);
 device.SetRenderState(RenderState.ZEnable,true);
 device.SetRenderState(RenderState.ZWriteEnable,false);
+device.Clear(ClearFlags.Target|ClearFlags.ZBuffer,System.Drawing.Color.Black,1,0);
+device.SetRenderState(RenderState.ZEnable,false);
+Console.WriteLine($"[NODEPTH] target={device.GetRenderTarget(0)?.Width} stream={100}");
+Triangle(0.2f,new D3DColor(1f,0f,0f,1f));
+Console.WriteLine($"[NODEPTH] red={string.Join(',',Pixel(32,32))}");
+device.SetRenderState(RenderState.ZEnable,true);
 device.Clear(ClearFlags.Target|ClearFlags.ZBuffer,System.Drawing.Color.Black,1,0);
 Triangle(0.2f,new D3DColor(1f,0f,0f,1f));
 Triangle(0.8f,new D3DColor(0f,0f,1f,1f));

@@ -197,6 +197,9 @@ namespace SlimDX.Direct3D9
         private readonly Device _device;
         private readonly System.Drawing.Font _font;
         private bool _disposed;
+        private Texture _cachedGlyphs;
+        private (string Text, int Width, int Height, DrawTextFormat Flags, int Color) _glyphKey;
+        private float _glyphX, _glyphY;
 
         public Font(Device device, System.Drawing.Font font)
         {
@@ -245,9 +248,15 @@ namespace SlimDX.Direct3D9
         public void DrawText(Sprite sprite, string text, System.Drawing.Rectangle rect,
                              DrawTextFormat flags, System.Drawing.Color color)
         {
-            var options = Layout(flags, rect.Width);
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (string.IsNullOrEmpty(text)) return;
             text = FormatText(text, flags);
+            if (_cachedGlyphs != null && _glyphKey == (text, rect.Width, rect.Height, flags, color.ToArgb()))
+            {
+                DrawCached(sprite, rect);
+                return;
+            }
+            var options = Layout(flags, rect.Width);
             var size = Measure(text, flags, rect.Width);
             float x = (flags & DrawTextFormat.Right) != 0 ? rect.Width - size.Width :
                 (flags & DrawTextFormat.Center) != 0 ? (rect.Width - size.Width) / 2f : 0;
@@ -262,14 +271,23 @@ namespace SlimDX.Direct3D9
             SixLabors.ImageSharp.Processing.ProcessingExtensions.Mutate(image, ctx =>
                 SixLabors.ImageSharp.Drawing.Processing.DrawTextExtensions.DrawText(ctx, options, text,
                     SixLabors.ImageSharp.Color.FromRgba((byte)color.R, (byte)color.G, (byte)color.B, (byte)color.A)));
-            using var texture = Texture.FromImage(_device, image);
+            _cachedGlyphs?.Dispose();
+            _cachedGlyphs = Texture.FromImage(_device, image);
+            _glyphKey = (text, rect.Width, rect.Height, flags, color.ToArgb());
+            _glyphX = clip ? 0 : x;
+            _glyphY = clip ? 0 : y;
+            DrawCached(sprite, rect);
+        }
+
+        private void DrawCached(Sprite sprite, System.Drawing.Rectangle rect)
+        {
             using var ownedSprite = sprite == null ? new Sprite(_device) : null;
             var target = sprite ?? ownedSprite;
             if (ownedSprite != null) target.Begin(SpriteFlags.AlphaBlend);
             try
             {
-                target.Draw(texture, null, null,
-                    new SlimDX.Vector3(rect.X + (clip ? 0 : x), rect.Y + (clip ? 0 : y), 0),
+                target.Draw(_cachedGlyphs, null, null,
+                    new SlimDX.Vector3(rect.X + _glyphX, rect.Y + _glyphY, 0),
                     new Color4(1f, 1f, 1f, 1f));
             }
             finally
@@ -290,7 +308,7 @@ namespace SlimDX.Direct3D9
             => DrawString(sprite, text, x, y, System.Drawing.Color.FromArgb(
                 (int)(Math.Clamp(color.Alpha, 0f, 1f) * 255), (int)(Math.Clamp(color.Red, 0f, 1f) * 255),
                 (int)(Math.Clamp(color.Green, 0f, 1f) * 255), (int)(Math.Clamp(color.Blue, 0f, 1f) * 255)));
-        public void Dispose() { _font.Dispose(); _disposed = true; }
+        public void Dispose() { _cachedGlyphs?.Dispose(); _font.Dispose(); _disposed = true; }
     }
 
     /// <summary>Vertex element descriptor (SlimDX-compatible).</summary>

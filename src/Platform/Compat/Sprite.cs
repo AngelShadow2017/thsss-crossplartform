@@ -2,6 +2,7 @@
 using System;
 using System.Drawing;
 using Silk.NET.OpenGL;
+using THSSS.Graphics;
 using SlimDX;
 
 namespace SlimDX.Direct3D9;
@@ -24,12 +25,22 @@ public class Sprite : IDisposable
     private readonly uint _vao;
     private readonly uint _vbo;
     private readonly uint _shader;
-    private readonly int _transformLocation;
-    private readonly int _projectionLocation;
+    private readonly THSSS.Graphics.IRenderShader _backendShader;
+    private readonly THSSS.Graphics.IRenderBuffer _backendBuffer;
+    private static readonly THSSS.Graphics.VertexLayout SpriteLayout = new(
+        FloatsPerVertex * sizeof(float),
+        new[]
+        {
+            new THSSS.Graphics.VertexAttribute(0, 3, THSSS.Graphics.VertexAttributeType.Float, false, 0),
+            new THSSS.Graphics.VertexAttribute(1, 2, THSSS.Graphics.VertexAttributeType.Float, false, 3 * sizeof(float)),
+            new THSSS.Graphics.VertexAttribute(2, 4, THSSS.Graphics.VertexAttributeType.Float, false, 5 * sizeof(float)),
+        });
     private readonly int _textureLocation;
+    private readonly int _glTextureLocation;
+    private THSSS.Graphics.IRenderBuffer _uniformBlock;
 
     private int _batchCount;
-    private uint _currentTexture;
+    private IRenderHandle _currentTexture;
     private Texture _currentTextureObject;
     private Matrix _transform = Matrix.Identity;
     private bool _disposed;
@@ -41,8 +52,19 @@ public class Sprite : IDisposable
     {
         _device = device;
         _gl = device.GL;
-        _shader = CreateShader(out _transformLocation, out _projectionLocation, out _textureLocation);
-        (_vao, _vbo) = CreateBuffers();
+        if (device.GL != null) _shader = CreateShader(out _glTextureLocation);
+        _backendShader = device.RenderBackend.CreateShader(new THSSS.Graphics.ShaderSource
+        {
+            Vertex = SpriteVertexSource, Fragment = SpriteFragmentSource,
+            VertexInputs = new[] { "aPosition", "aTexCoord", "aColor" },
+        });
+        _textureLocation = _backendShader.GetUniformLocation("uTexture");
+        _backendBuffer = device.RenderBackend.CreateBuffer(THSSS.Graphics.BufferKind.Vertex,
+            MaxBatchSize * VerticesPerQuad * FloatsPerVertex * sizeof(float));
+        // std140 block: two mat4 = 128 bytes; created once and refilled per draw.
+        _uniformBlock = device.RenderBackend.CreateBuffer(
+            THSSS.Graphics.BufferKind.Uniform, 128);
+        if (device.GL != null) (_vao, _vbo) = CreateBuffers();
     }
 
     public bool Disposed => _disposed;
@@ -66,11 +88,10 @@ public class Sprite : IDisposable
     public void Begin(SpriteFlags flags)
     {
         _batchCount = 0;
-        _currentTexture = 0;
+        _currentTexture = null;
         _flags = flags;
         _savedBlend = _device.CaptureBlendState();
-        _savedDepth = _gl.IsEnabled(Silk.NET.OpenGL.EnableCap.DepthTest);
-        _savedCull = _gl.IsEnabled(Silk.NET.OpenGL.EnableCap.CullFace);
+        (_savedDepth, _savedCull) = _device.RenderBackend.QueryRasterState();
         if ((flags & SpriteFlags.DoNotModifyRenderState) != 0) return;
         // Blend factors were just set by the 3D pass (D3D keeps them as device
         // state); honour them here instead of forcing alpha blending, then reset
@@ -82,8 +103,7 @@ public class Sprite : IDisposable
             _device.SetRenderState(RenderState.DestinationBlend, Blend.InverseSourceAlpha);
         }
         _device.ApplyBlendState();
-        _gl.Disable(Silk.NET.OpenGL.EnableCap.DepthTest);
-        _gl.Disable(Silk.NET.OpenGL.EnableCap.CullFace);
+        _device.RenderBackend.SetRasterState(false, false);
     }
 
     public void End()
@@ -91,8 +111,7 @@ public class Sprite : IDisposable
         Flush();
         if ((_flags & SpriteFlags.DoNotSaveState) != 0) return;
         _device.RestoreBlendState(_savedBlend);
-        if (_savedDepth) _gl.Enable(Silk.NET.OpenGL.EnableCap.DepthTest); else _gl.Disable(Silk.NET.OpenGL.EnableCap.DepthTest);
-        if (_savedCull) _gl.Enable(Silk.NET.OpenGL.EnableCap.CullFace); else _gl.Disable(Silk.NET.OpenGL.EnableCap.CullFace);
+        _device.RenderBackend.SetRasterState(_savedDepth, _savedCull);
     }
 
     public void SetTransform(Matrix transform) => Transform = transform;
@@ -115,7 +134,7 @@ public class Sprite : IDisposable
     public void Draw(Texture texture, Rectangle? sourceRect, Vector3? rotationCenter, Vector3 position, Color4 color)
     {
         if (texture == null) return;
-        if (_batchCount > 0 && _currentTexture != texture.Handle) Flush();
+        if (_batchCount > 0 && !ReferenceEquals(_currentTexture, texture.Handle)) Flush();
         if (_batchCount >= MaxBatchSize) Flush();
         _currentTexture = texture.Handle;
         _currentTextureObject = texture;
@@ -123,7 +142,7 @@ public class Sprite : IDisposable
         var (u0, v0, u1, v1) = AtlasCoordinates(texture, sourceRect);
         // Atlas rows upload in source order, so v=0 is the image's top row. A GL
         // render target keeps its top row at v=1, so only that source inverts.
-        if ((texture.Usage & Usage.RenderTarget) != 0)
+        if ((texture.Usage & Usage.RenderTarget) != 0 && _device.RenderBackend.Features.OriginBottomLeft)
         {
             (v0, v1) = (1f - v0, 1f - v1);
         }
@@ -182,12 +201,12 @@ public class Sprite : IDisposable
             ? _device.FramebufferHeight : _device.Viewport.Height);
         var (viewportX, viewportY, viewportWidth, viewportHeight) =
             FitLogicalSurface(width, height);
-        _gl.Viewport(viewportX, viewportY, (uint)viewportWidth, (uint)viewportHeight);
+        _device.RenderBackend.SetViewport(viewportX, viewportY, viewportWidth, viewportHeight, 0f, 1f);
 
         var projection = Matrix.OrthoOffCenterLH(0, _device.GameWidth, _device.GameHeight, 0, -1, 1);
         var effect = _device.ActiveEffect;
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _currentTexture);
+        if (_gl != null) _gl.ActiveTexture(TextureUnit.Texture0);
+        _device.RenderBackend.BindTexture(_currentTextureObject?.RenderTexture);
         if (effect != null)
         {
             effect.SourceTexture = _currentTextureObject;
@@ -195,47 +214,75 @@ public class Sprite : IDisposable
         }
         else
         {
-            _gl.UseProgram(_shader);
-            _gl.UniformMatrix4(_projectionLocation, 1, false, projection.ToOpenGLMatrix());
-            _gl.UniformMatrix4(_transformLocation, 1, false, _transform.ToOpenGLMatrix());
+            if (_gl != null) _gl.UseProgram(_shader);
+            _device.RenderBackend.SetUniformBlock(0, _uniformBlock,
+                BuildUniformBlock(projection, _transform));
         }
 
-        if (effect == null) _gl.Uniform1(_textureLocation, 0);
+        _device.ApplyBlendState();
+        int floats = _batchCount * VerticesPerQuad * FloatsPerVertex;
+        var vertexSpan = _vertices.AsSpan(0, floats);
+        var vertexBytes = System.Runtime.InteropServices.MemoryMarshal.AsBytes(vertexSpan);
+        if (effect != null && _gl == null)
+        {
+            _backendBuffer.Update(vertexBytes, 0);
+            _device.RenderBackend.Draw(effect.BackendShader, _backendBuffer, SpriteLayout,
+                THSSS.Graphics.PrimitiveKind.TriangleList, 0, _batchCount * VerticesPerQuad);
+        }
+        else if (effect != null)
+        {
+            // Effect passes render with their own program; keep the classic sprite batch.
+            _gl.BindVertexArray(_vao);
+            _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+            _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0, (uint)(floats * sizeof(float)), (ReadOnlySpan<float>)vertexSpan);
+            _gl.DrawArrays(Silk.NET.OpenGL.PrimitiveType.Triangles, 0, (uint)(_batchCount * VerticesPerQuad));
+            _gl.BindVertexArray(0);
+        }
+        else
+        {
+            _backendBuffer.Update(vertexBytes, 0);
+            _backendShader.SetUniform(_textureLocation, 0);
+            _device.RenderBackend.Draw(_backendShader, _backendBuffer, SpriteLayout,
+                THSSS.Graphics.PrimitiveKind.TriangleList, 0, _batchCount * VerticesPerQuad);
+        }
 
-        _gl.BindVertexArray(_vao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
-        _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0,
-            (uint)(_batchCount * VerticesPerQuad * FloatsPerVertex * sizeof(float)),
-            (ReadOnlySpan<float>)_vertices);
-        _gl.DrawArrays(Silk.NET.OpenGL.PrimitiveType.Triangles, 0, (uint)(_batchCount * VerticesPerQuad));
-
-        _gl.BindVertexArray(0);
-        _gl.UseProgram(0);
+        if (_gl != null) _gl.BindVertexArray(0);
         effect?.Unbind();
         _batchCount = 0;
     }
 
     private (int X, int Y, int Width, int Height) FitLogicalSurface(int width, int height)
     {
-        float logicalAspect = (float)_device.GameWidth / _device.GameHeight;
-        float framebufferAspect = (float)width / height;
-        if (framebufferAspect > logicalAspect)
-        {
-            int scaledWidth = (int)(height * logicalAspect);
-            return ((width - scaledWidth) / 2, 0, scaledWidth, height);
-        }
-        int scaledHeight = (int)(width / logicalAspect);
-        return (0, (height - scaledHeight) / 2, width, scaledHeight);
+        var content = THSSS.Graphics.PresentationGeometry.Fit(width, height, _device.GameWidth, _device.GameHeight);
+        return (content.X, content.Y, content.Width, content.Height);
     }
 
-    private uint CreateShader(out int transformLocation, out int projectionLocation, out int textureLocation)
+    /// <summary>
+    /// std140 layout for SpriteUniforms: uTransform then uProjection, each a 4x4 matrix
+    /// stored column-major, so the block is a flat 128-byte buffer.
+    /// </summary>
+    private static byte[] BuildUniformBlock(Matrix projection, Matrix transform)
     {
-        const string vertexSource = @"#version 330 core
+        var bytes = new byte[128];
+        WriteMatrix(bytes, 0, transform.ToOpenGLMatrix());
+        WriteMatrix(bytes, 64, projection.ToOpenGLMatrix());
+        return bytes;
+    }
+
+    private static void WriteMatrix(byte[] destination, int offset, ReadOnlySpan<float> matrix)
+    {
+        for (int i = 0; i < 16; i++)
+            BitConverter.TryWriteBytes(destination.AsSpan(offset + i * 4, 4), matrix[i]);
+    }
+
+    private const string SpriteVertexSource = @"#version 330 core
 layout (location = 0) in vec3 aPosition;
 layout (location = 1) in vec2 aTexCoord;
 layout (location = 2) in vec4 aColor;
-uniform mat4 uTransform;
-uniform mat4 uProjection;
+layout (std140) uniform SpriteUniforms {
+    mat4 uTransform;
+    mat4 uProjection;
+};
 out vec2 TexCoord;
 out vec4 Color;
 void main()
@@ -245,7 +292,7 @@ void main()
     Color = aColor;
 }";
 
-        const string fragmentSource = @"#version 330 core
+    private const string SpriteFragmentSource = @"#version 330 core
 in vec2 TexCoord;
 in vec4 Color;
 out vec4 FragColor;
@@ -254,6 +301,12 @@ void main()
 {
     FragColor = texture(uTexture, TexCoord) * Color;
 }";
+
+    private uint CreateShader(out int textureLocation)
+    {
+        const string vertexSource = SpriteVertexSource;
+
+        const string fragmentSource = SpriteFragmentSource;
 
         uint vertexShader = Compile(ShaderType.VertexShader, vertexSource);
         uint fragmentShader = Compile(ShaderType.FragmentShader, fragmentSource);
@@ -268,8 +321,6 @@ void main()
         _gl.DeleteShader(vertexShader);
         _gl.DeleteShader(fragmentShader);
 
-        transformLocation = _gl.GetUniformLocation(program, "uTransform");
-        projectionLocation = _gl.GetUniformLocation(program, "uProjection");
         textureLocation = _gl.GetUniformLocation(program, "uTexture");
         return program;
     }
@@ -315,6 +366,9 @@ void main()
         if (_vao != 0) _gl.DeleteVertexArray(_vao);
         if (_vbo != 0) _gl.DeleteBuffer(_vbo);
         if (_shader != 0) _gl.DeleteProgram(_shader);
+        _backendShader.Dispose();
+        _backendBuffer.Dispose();
+        _uniformBlock.Dispose();
         _disposed = true;
     }
 }

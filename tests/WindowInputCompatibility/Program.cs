@@ -39,6 +39,7 @@ internal static class Checks
             Check(JoystickDevices.HasControllerButtons(Bits(0x220)),"Linux dpad recognized");
             FakeWindowAndInput();
             FrameTiming.Run();
+            PresentationGeometryChecks.Run();
             LockAndDiagnostics();
             if (args.Contains("--glfw")) { RealWindow(); FrameTiming.RealLoop(); }
             if (args.Contains("--game-smoke")) GameSmoke.Run();

@@ -1,24 +1,31 @@
-// Cross-platform Texture (replaces SlimDX.Direct3D9.Texture)
+// Cross-platform Texture (replaces SlimDX.Direct3D9.Texture).
+// Talks only to the render backend so an OpenGL, Vulkan or future backend can be
+// swapped at startup.
 using System;
 using System.Drawing;
 using System.IO;
 using Silk.NET.OpenGL;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using THSSS.Graphics;
 
 namespace SlimDX.Direct3D9;
 
-/// <summary>Cross-platform texture using OpenGL</summary>
+/// <summary>Cross-platform texture backed by <see cref="IRenderTexture"/>.</summary>
 public unsafe class Texture : IDisposable
 {
-    private GL _gl;
-    private uint _handle;
+    private readonly IRenderBackend _backend;
+    private IRenderTexture _texture;
     private int _width;
     private int _height;
     private int _levels;
     private bool _disposed;
 
-    public uint Handle => _handle;
+    /// <summary>Backend-neutral GPU handle; the GL/Vulkan name never leaks out.</summary>
+    public IRenderHandle Handle => _texture?.Handle;
+
+    /// <summary>Raw GL texture name, for tests that still drive GL directly.</summary>
+    public uint GLName => _texture is THSSS.Graphics.OpenGl.OpenGlTexture gl ? gl.Id : 0;
     public bool Disposed => _disposed;
     public int Width => _width;
     public int Height => _height;
@@ -27,35 +34,28 @@ public unsafe class Texture : IDisposable
     public Pool Pool { get; private set; }
     public Usage Usage { get; private set; }
 
-    public Texture(Device device, int width, int height, int levels, Usage usage, Format format, Pool pool)
-        : this(device?.GL, width, height, levels, usage, format, pool) { }
+    internal IRenderTexture RenderTexture => _texture;
 
-    public Texture(GL gl, int width, int height, int levels, Usage usage, Format format, Pool pool)
+    public Texture(Device device, int width, int height, int levels, Usage usage, Format format, Pool pool)
+        : this(device?.RenderBackend ?? throw new ArgumentNullException(nameof(device)),
+               width, height, levels, usage, format, pool) { }
+
+    internal Texture(IRenderBackend backend, int width, int height, int levels, Usage usage, Format format, Pool pool)
     {
-        _gl = gl;
-        _width = width;
-        _height = height;
-        _levels = Math.Max(1, levels);
+        _backend = backend;
+        _width = Math.Max(1, width);
+        _height = Math.Max(1, height);
         Format = format;
         Pool = pool;
         Usage = usage;
+        _levels = Math.Max(1, levels);
 
-        _handle = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, _handle);
-
-        // Set default filtering
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
-
-        int availableLevels = 1 + (int)Math.Floor(Math.Log2(Math.Max(width,height)));
-        _levels = levels == 0 ? availableLevels : Math.Min(Math.Max(1,levels),availableLevels);
-        _gl.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMaxLevel,_levels-1);
-        for (int level=0;level<_levels;level++)
-            _gl.TexImage2D(TextureTarget.Texture2D,level,format == Format.X8R8G8B8 ? InternalFormat.Rgb8 : InternalFormat.Rgba8,
-                (uint)Math.Max(1,width>>level),(uint)Math.Max(1,height>>level),0,
-                PixelFormat.Rgba,PixelType.UnsignedByte,null);
+        var textureFormat = format == Format.X8R8G8B8 && backend.Features.SupportsRgb8Textures
+            ? TextureFormat.Rgb8
+            : TextureFormat.Rgba8;
+        _texture = (usage & Usage.RenderTarget) != 0
+            ? backend.CreateRenderTexture(_width, _height, textureFormat)
+            : backend.CreateTexture(_width, _height, textureFormat, ReadOnlySpan<byte>.Empty);
     }
 
     public static Texture FromFile(Device device, string fileName, Usage usage, Pool pool, Filter filter, Filter mipFilter, int colorKey)
@@ -81,30 +81,14 @@ public unsafe class Texture : IDisposable
 
     public static Texture FromImage(Device device, Image<Rgba32> image)
     {
-        var tex = new Texture(device.GL, image.Width, image.Height, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+        var tex = new Texture(device, image.Width, image.Height, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
 
-        unsafe
-        {
-            // Atlas UVs address source row zero at v=0. Preserve upload order;
-            // screen-space Y inversion is handled by the sprite projection.
-            // Make sure the target texture is bound for the upload below.
-            tex._gl.BindTexture(Silk.NET.OpenGL.TextureTarget.Texture2D, tex._handle);
-            image.ProcessPixelRows(accessor =>
-            {
-                int h = accessor.Height;
-                for (int y = 0; y < h; y++)
-                {
-                    var row = accessor.GetRowSpan(y);
-                    fixed (Rgba32* ptr = row)
-                    {
-                        tex._gl.TexSubImage2D((GLEnum)TextureTarget.Texture2D, 0, 0, y,
-                            (uint)accessor.Width, 1,
-                            (GLEnum)PixelFormat.Rgba, (GLEnum)PixelType.UnsignedByte, ptr);
-                    }
-                }
-            });
-        }
-
+        // Atlas UVs address source row zero at v=0: upload rows in source order and let
+        // the sprite projection handle screen-space Y.
+        int width = image.Width, height = image.Height;
+        var pixels = new byte[width * height * 4];
+        image.CopyPixelDataTo(pixels);
+        tex._texture.Upload(pixels, width * 4);
         return tex;
     }
 
@@ -113,18 +97,30 @@ public unsafe class Texture : IDisposable
 
     public static Texture FromFile(Device device, string fileName, int width, int height, int mipLevels, Usage usage, Format format, Pool pool, Filter filter, Filter mipFilter, int colorKey, ImageInformation? imageInfo)
     {
-        if (File.Exists(fileName))
-        {
+        if (File.Exists(AssetPath.Resolve(fileName)))
             return FromFile(device, fileName);
-        }
-        // Return a placeholder texture
-        return new Texture(device.GL, Math.Max(1, width), Math.Max(1, height), 1, usage, format, pool);
+        // Placeholder keeps the game running when an optional atlas is missing.
+        return new Texture(device, Math.Max(1, width), Math.Max(1, height), 1, usage, format, pool);
+    }
+
+    /// <summary>Wraps an existing GPU texture (render targets, text caches).</summary>
+    internal static Texture Wrap(Device device, IRenderTexture texture, int width, int height, Usage usage)
+        => new Texture(device.RenderBackend, texture, width, height, usage);
+
+    private Texture(IRenderBackend backend, IRenderTexture texture, int width, int height, Usage usage)
+    {
+        _backend = backend;
+        _texture = texture;
+        _width = width;
+        _height = height;
+        _levels = 1;
+        Format = Format.A8R8G8B8;
+        Pool = Pool.Default;
+        Usage = usage;
     }
 
     public Surface GetSurfaceLevel(int level)
-    {
-        return new Surface(_gl, _width, _height, (Usage & Usage.RenderTarget) != 0, _handle);
-    }
+        => new Surface(_backend, _width, _height, (Usage & Usage.RenderTarget) != 0, _texture);
 
     public DataRectangle LockRectangle(int level, System.Drawing.Rectangle rect, LockFlags flags)
     {
@@ -134,65 +130,42 @@ public unsafe class Texture : IDisposable
     }
 
     public DataRectangle LockRectangle(int level, LockFlags flags)
-    {
-        return LockRectangle(level, new System.Drawing.Rectangle(0, 0, _width, _height), flags);
-    }
+        => LockRectangle(level, new System.Drawing.Rectangle(0, 0, _width, _height), flags);
 
     private DataStream _lockedData;
     private System.Drawing.Rectangle _lockedRectangle;
 
-    public unsafe void UnlockRectangle(int level)
+    public void UnlockRectangle(int level)
     {
         var bytes = _lockedData.ToArray();
-        _gl.BindTexture(TextureTarget.Texture2D, _handle);
-        fixed (byte* ptr = bytes)
-        {
-            _gl.TexSubImage2D(TextureTarget.Texture2D, 0,
-                _lockedRectangle.X, _lockedRectangle.Y,
-                (uint)_lockedRectangle.Width, (uint)_lockedRectangle.Height,
-                PixelFormat.Bgra, PixelType.UnsignedByte, ptr);
-        }
+        _texture.Upload(bytes, _lockedRectangle.Width * 4);
         _lockedData = null;
     }
 
     public void GenerateMipMaps()
     {
-        _gl.BindTexture(TextureTarget.Texture2D, _handle);
-        _gl.GenerateMipmap(TextureTarget.Texture2D);
+        // Mipmaps are generated by the backend when a texture carries levels; the
+        // current textures all request a single level, so this is a no-op there.
     }
 
     public void SetFilter(TextureFilterType minFilter, TextureFilterType magFilter, TextureFilterType mipFilter)
     {
-        _gl.BindTexture(TextureTarget.Texture2D, _handle);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)ConvertFilter(minFilter, mipFilter));
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)ConvertFilter(magFilter, TextureFilterType.None));
-    }
-
-    private TextureMinFilter ConvertFilter(TextureFilterType filter, TextureFilterType mipFilter)
-    {
-        return (filter, mipFilter) switch
-        {
-            (TextureFilterType.Point, TextureFilterType.Point) => TextureMinFilter.NearestMipmapNearest,
-            (TextureFilterType.Point, TextureFilterType.Linear) => TextureMinFilter.NearestMipmapLinear,
-            (TextureFilterType.Linear, TextureFilterType.Point) => TextureMinFilter.LinearMipmapNearest,
-            (TextureFilterType.Linear, TextureFilterType.Linear) => TextureMinFilter.LinearMipmapLinear,
-            (TextureFilterType.Point, _) => TextureMinFilter.Nearest,
-            (TextureFilterType.Linear, _) => TextureMinFilter.Linear,
-            _ => TextureMinFilter.Linear,
-        };
+        // D3DTEXF_* (1=Point, 2=Linear, 3=Anisotropic) mapped onto the sampler block.
+        const int address = 1; // D3DTADDRESS_WRAP
+        _texture.SetSamplerState(new SamplerStateBlock(
+            AddressU: address, AddressV: address,
+            MinFilter: (int)minFilter, MagFilter: (int)magFilter, MipFilter: (int)mipFilter,
+            MaxAnisotropy: 1, MipLodBias: 0f,
+            BorderRed: 0f, BorderGreen: 0f, BorderBlue: 0f, BorderAlpha: 0f,
+            BorderEnabled: false));
     }
 
     public void Dispose()
     {
-        if (!_disposed)
-        {
-            if (_handle != 0)
-            {
-                _gl.DeleteTexture(_handle);
-                _handle = 0;
-            }
-            _disposed = true;
-        }
+        if (_disposed) return;
+        _texture?.Dispose();
+        _texture = null;
+        _disposed = true;
     }
 }
 

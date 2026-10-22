@@ -1,99 +1,89 @@
-// Surface compatibility layer (render targets)
+// Surface compatibility layer (render targets).
+// Backend-neutral: the framebuffer and colour texture are IRender objects, and the
+// D3D9-style accessors (FBO/pixel readback/ToFile) are expressed through the backend.
 using System;
 using Silk.NET.OpenGL;
+using THSSS.Graphics;
 using System.Drawing;
 
 namespace SlimDX.Direct3D9;
 
 public unsafe class Surface : IDisposable
 {
-    private GL _gl;
-    private uint _fbo;
-    private uint _textureHandle;
+    private const int _gl_BackBufferAttachment = -1;
+    private readonly IRenderBackend _backend;
+    private IRenderFramebuffer _framebuffer;
+    private IRenderTexture _texture;
     private int _width;
     private int _height;
     private bool _isRenderTarget;
     private bool _disposed;
 
-    public uint FBO => _fbo;
     // Default framebuffer may be physically larger than the original logical backbuffer.
     internal Rectangle? ReadbackRegion { get; set; }
     internal uint DepthBuffer { get; private set; }
-    private bool _ownsTexture;
+    internal THSSS.Graphics.IRenderDepthSurface? DepthSurface { get; set; }
 
-    internal GL GL => _gl;
+    public IRenderFramebuffer Framebuffer => _framebuffer;
+
+    /// <summary>
+    /// Raw GL framebuffer name, for tests that still drive GL directly. Replace with
+    /// backend-level checks when the tests are migrated.
+    /// </summary>
+    public uint FBO => _framebuffer is THSSS.Graphics.OpenGl.OpenGlFramebuffer glFbo ? glFbo.Fbo : 0;
+
+    /// <summary>Colour texture of a render target, or null for the default backbuffer.</summary>
+    public IRenderTexture Texture => _texture;
 
     public int Width => _width;
-
     public int Height => _height;
-
     public bool IsDisposed => _disposed;
 
-    public Surface(GL gl, int width, int height, bool isRenderTarget)
+    /// <summary>Backbuffer surface from a raw GL context (tests and legacy call sites).</summary>
+    public Surface(Silk.NET.OpenGL.GL gl, int width, int height, bool isRenderTarget)
+        : this(BackendFor(gl), width, height, isRenderTarget) { }
+
+
+    private static IRenderBackend BackendFor(Silk.NET.OpenGL.GL gl)
+        => new THSSS.Graphics.OpenGl.OpenGlRenderBackend(gl);
+
+    /// <summary>Backbuffer surface (no own colour attachment).</summary>
+    public Surface(IRenderBackend backend, int width, int height, bool isRenderTarget)
     {
-        _gl = gl;
+        _backend = backend;
         _width = width;
         _height = height;
         _isRenderTarget = isRenderTarget;
-
         if (!isRenderTarget) return;
 
-        _ownsTexture = true;
-        _textureHandle = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, _textureHandle);
-        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)width, (uint)height, 0,
-            Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, null);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
-
-        uint previousDraw = (uint)_gl.GetInteger(GLEnum.DrawFramebufferBinding);
-        uint previousRead = (uint)_gl.GetInteger(GLEnum.ReadFramebufferBinding);
-        _fbo = _gl.GenFramebuffer();
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
-        _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
-            TextureTarget.Texture2D, _textureHandle, 0);
-        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, previousDraw);
-        _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previousRead);
+        _texture = backend.CreateRenderTexture(width, height, TextureFormat.Rgba8);
+        // D3D9 render targets are created together with a depth-stencil surface, so a
+        // target that later receives DepthStencilSurface already has depth storage.
+        _framebuffer = backend.CreateFramebuffer(_texture, DepthFormat.Depth24, width, height);
+        if (!_framebuffer.IsComplete)
+            throw new InvalidOperationException("Incomplete texture framebuffer.");
     }
 
-    public Surface(GL gl, int width, int height, bool isRenderTarget, uint sharedTextureHandle)
+    /// <summary>Render target sharing a texture owned by a <see cref="Texture"/>.</summary>
+    internal Surface(IRenderBackend backend, int width, int height, bool isRenderTarget, IRenderTexture sharedTexture)
     {
-        _gl = gl;
+        _backend = backend;
         _width = width;
         _height = height;
         _isRenderTarget = isRenderTarget;
-        _textureHandle = sharedTextureHandle;
-
+        _texture = sharedTexture;
         if (!isRenderTarget) return;
 
-        uint previousDraw = (uint)_gl.GetInteger(GLEnum.DrawFramebufferBinding);
-        uint previousRead = (uint)_gl.GetInteger(GLEnum.ReadFramebufferBinding);
-        _fbo = _gl.GenFramebuffer();
-        try
-        {
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
-            _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer,
-                FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, _textureHandle, 0);
-            var status = _gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
-            if (status != GLEnum.FramebufferComplete)
-                throw new InvalidOperationException($"Incomplete texture framebuffer: {status}");
-        }
-        finally
-        {
-            _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, previousDraw);
-            _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previousRead);
-        }
+        _framebuffer = backend.CreateFramebuffer(_texture, DepthFormat.Depth24, width, height);
+        if (!_framebuffer.IsComplete)
+            throw new InvalidOperationException("Incomplete texture framebuffer.");
     }
 
     public DataRectangle LockRectangle(LockFlags flags)
-    {
-        return new DataRectangle { Pitch = _width * 4, Data = new DataStream(_width * _height * 4, true, true) };
-    }
+        => new() { Pitch = _width * 4, Data = new DataStream(_width * _height * 4, true, true) };
 
     public DataRectangle LockRectangle(Rectangle rect, LockFlags flags)
-    {
-        return new DataRectangle { Pitch = _width * 4, Data = new DataStream(rect.Width * rect.Height * 4, true, true) };
-    }
+        => new() { Pitch = _width * 4, Data = new DataStream(rect.Width * rect.Height * 4, true, true) };
 
     public void UnlockRectangle() { }
 
@@ -112,50 +102,43 @@ public unsafe class Surface : IDisposable
               ComponentType = SixLabors.ImageSharp.Formats.Pbm.PbmComponentType.Byte },
             _ => throw new NotSupportedException($"Screenshot encoding {format} is not supported.")
         };
-        var gl = surface.GL;
-        var region = surface.ReadbackRegion ?? new Rectangle(0,0,surface.Width,surface.Height);
-        var pixels = new byte[checked(region.Width * region.Height * 4)];
-        uint previousRead = (uint)gl.GetInteger(GLEnum.ReadFramebufferBinding);
-        uint previousPackBuffer = (uint)gl.GetInteger(GLEnum.PixelPackBufferBinding);
-        var packNames = new[] { GLEnum.PackAlignment, GLEnum.PackRowLength, GLEnum.PackSkipRows, GLEnum.PackSkipPixels };
-        var packValues = Array.ConvertAll(packNames, name => gl.GetInteger(name));
-        uint temporaryFbo = 0;
-        int sourceReadBuffer = 0;
-        bool sourceBound = false;
-        try
+        var backend = surface._backend;
+        var region = surface.ReadbackRegion ?? new Rectangle(0, 0, surface.Width, surface.Height);
+
+        // Read from the surface's own framebuffer, or from a temporary one when the
+        // surface only wraps a texture; restore whatever was bound before.
+        var previousDraw = backend.CurrentDrawFramebuffer;
+        var previousRead = backend.CurrentReadFramebuffer;
+        if (surface._framebuffer != null)
         {
-            uint sourceFbo = surface.FBO;
-            if (sourceFbo == 0 && surface._textureHandle != 0)
-            {
-                temporaryFbo = gl.GenFramebuffer();
-                sourceFbo = temporaryFbo;
-                gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, sourceFbo);
-                gl.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0,
-                    TextureTarget.Texture2D, surface._textureHandle, 0);
-            }
-            gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, sourceFbo);
-            sourceReadBuffer = gl.GetInteger(GLEnum.ReadBuffer);
-            sourceBound = true;
-            gl.ReadBuffer(sourceFbo != 0 ? ReadBufferMode.ColorAttachment0 : (ReadBufferMode)sourceReadBuffer);
-            if (gl.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer) != GLEnum.FramebufferComplete)
-                throw new InvalidOperationException("Cannot capture an incomplete surface framebuffer.");
-            gl.BindBuffer(BufferTargetARB.PixelPackBuffer, 0);
-            for (int i = 0; i < packNames.Length; i++) gl.PixelStore(packNames[i], i == 0 ? 1 : 0);
-            fixed (byte* data = pixels)
-                gl.ReadPixels(region.X, region.Y, (uint)region.Width, (uint)region.Height,
-                    PixelFormat.Rgba, PixelType.UnsignedByte, data);
+            backend.BindFramebuffer(surface._framebuffer);
         }
-        finally
+        else if (surface._texture != null)
         {
-            if (sourceBound) gl.ReadBuffer((ReadBufferMode)sourceReadBuffer);
-            gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previousRead);
-            gl.BindBuffer(BufferTargetARB.PixelPackBuffer, previousPackBuffer);
-            for (int i = 0; i < packNames.Length; i++) gl.PixelStore(packNames[i], packValues[i]);
-            if (temporaryFbo != 0) gl.DeleteFramebuffer(temporaryFbo);
+            using var temporary = backend.CreateFramebuffer(surface._texture, DepthFormat.None,
+                surface.Width, surface.Height);
+            backend.RestoreFramebufferBindings(temporary, temporary);
         }
+        if (surface._framebuffer == null && surface._texture == null)
+        {
+            // The default framebuffer is not an IRenderFramebuffer object; bind it
+            // explicitly so a previously bound render target cannot capture instead.
+            backend.RestoreFramebufferBindings(null, null);
+            // Default framebuffer: read from the displayed buffer, not an offscreen one.
+            backend.SetReadBuffer((int)_gl_BackBufferAttachment);
+        }
+        else if (surface._framebuffer != null)
+        {
+            backend.SetReadBuffer(0);
+        }
+        var pixels = backend.ReadPixels(region.X, region.Y, region.Width, region.Height);
+        backend.RestoreFramebufferBindings(previousDraw, previousRead);
+
         int stride = region.Width * 4;
         var row = new byte[stride];
-        int flippedRows = surface._isRenderTarget || surface._textureHandle == 0 ? region.Height / 2 : 0;
+        // GL row 0 is the bottom for both render targets and the default framebuffer.
+        // Every GL source (own FBO, temporary wrap, default framebuffer) is bottom-up.
+        int flippedRows = region.Height / 2;
         for (int y = 0; y < flippedRows; y++)
         {
             int top = y * stride, bottom = (region.Height - 1 - y) * stride;
@@ -167,46 +150,39 @@ public unsafe class Surface : IDisposable
             pixels, region.Width, region.Height);
         if (region.Width != surface.Width || region.Height != surface.Height)
             SixLabors.ImageSharp.Processing.ProcessingExtensions.Mutate(image, ctx =>
-                SixLabors.ImageSharp.Processing.ResizeExtensions.Resize(ctx,surface.Width,surface.Height));
+                SixLabors.ImageSharp.Processing.ResizeExtensions.Resize(ctx, surface.Width, surface.Height));
         using var stream = System.IO.File.Create(fileName);
         image.Save(stream, encoder);
     }
 
-    /// <summary>D3D9 depth-stencil surface; the GL render target carries its own depth.</summary>
+    /// <summary>D3D9 depth-stencil surface. Backend render targets own their depth.</summary>
     public static Surface CreateDepthStencil(Device device, int width, int height, Format format,
         MultiSampleType multiSample, int quality, bool discard)
     {
         if (multiSample != MultiSampleType.None)
             throw new NotSupportedException("Multisampled depth requires a matching multisampled render target.");
-        var surface = new Surface(device.GL, width, height, false);
-        var gl = device.GL;
-        uint previous = (uint)gl.GetInteger(GLEnum.RenderbufferBinding);
-        surface.DepthBuffer = gl.GenRenderbuffer();
-        gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, surface.DepthBuffer);
-        gl.RenderbufferStorage(RenderbufferTarget.Renderbuffer,
-            format == Format.D16 ? InternalFormat.DepthComponent16 : InternalFormat.DepthComponent24,
-            (uint)width, (uint)height);
-        gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, previous);
+        var surface = new Surface(device.RenderBackend, width, height, false);
+        var depth = device.RenderBackend.CreateDepthSurface(width, height,
+            format == Format.D16 ? THSSS.Graphics.DepthFormat.Depth16 : THSSS.Graphics.DepthFormat.Depth24);
+        surface.DepthSurface = depth;
+        surface.DepthBuffer = depth.NativeAttachmentId;
         return surface;
     }
 
     public void Bind()
     {
-        if (_fbo != 0) _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _fbo);
+        if (_framebuffer != null) _backend.BindFramebuffer(_framebuffer);
     }
 
-    public void Unbind() => _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+    public void Unbind() => _backend.BindFramebuffer(null);
 
     public void Dispose()
     {
         if (_disposed) return;
-        if (_fbo != 0)
-        {
-            _gl.DeleteFramebuffer(_fbo);
-            _fbo = 0;
-        }
-        if (DepthBuffer != 0) { _gl.DeleteRenderbuffer(DepthBuffer); DepthBuffer = 0; }
-        if (_ownsTexture && _textureHandle != 0) { _gl.DeleteTexture(_textureHandle); _textureHandle = 0; }
+        _framebuffer?.Dispose();
+        _framebuffer = null;
+        _texture = null;
+        DepthBuffer = 0;
         _disposed = true;
     }
 }

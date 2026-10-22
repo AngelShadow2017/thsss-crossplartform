@@ -10,6 +10,16 @@ public class ScreenTexManager
 
 	public Texture RenderTexture => ScreenTex[ScreenLevel].renderTexture;
 
+	/// <summary>True while a caller inside Begin()/End() owns the frame instead of the default one.</summary>
+	internal bool HasComposite => ScreenLevel > 0;
+
+	/// <summary>
+	/// Texture holding the finished frame while a level is active. Begin() renders into the
+	/// level it opens and End() composites that level back, so the finished pixels sit one
+	/// level below the one that was just closed.
+	/// </summary>
+	internal Texture? ActiveComposite => ScreenLevel > 0 ? ScreenTex[ScreenLevel - 1].renderTexture : null;
+
 	public ScreenTexManager(Device DeviceMain)
 	{
 		ScreenTex = new ScreenTexture[5];

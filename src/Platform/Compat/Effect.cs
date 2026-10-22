@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Silk.NET.OpenGL;
+using THSSS.Graphics;
 
 namespace SlimDX.Direct3D9;
 
@@ -18,6 +19,14 @@ public class Effect : IDisposable
     private uint _program, _sampler;
     private uint _previousSampler;
     private bool _bound;
+    private IRenderShader _backendShader;
+    private IRenderBuffer _backendUniforms;
+    private readonly byte[] _uniformData = new byte[EffectShaders.UniformSize];
+    private static readonly SamplerStateBlock EffectSampler = new(
+        AddressU: (int)TextureAddress.Mirror, AddressV: (int)TextureAddress.Mirror,
+        MinFilter: (int)TextureFilter.Linear, MagFilter: (int)TextureFilter.Linear,
+        MipFilter: (int)TextureFilter.None, MaxAnisotropy: 1, MipLodBias: 0f,
+        BorderRed: 0f, BorderGreen: 0f, BorderBlue: 0f, BorderAlpha: 0f, BorderEnabled: false);
 
     public Effect(Device device) : this(device, EffectKind.Filter) { }
     public Effect(Device device, byte[] data) : this(device, Decode(data)) { }
@@ -151,10 +160,51 @@ public class Effect : IDisposable
     public void OnLostDevice() { CheckDisposed(); ReleaseGpu(); }
 
     internal Texture SourceTexture { get; set; }
+    internal IRenderShader BackendShader => _backendShader;
+
+    private void BindBackend(Matrix transform, Matrix projection)
+    {
+        var backend = _device.RenderBackend;
+        _backendShader ??= backend.CreateShader(EffectShaders.BackendSource(_kind));
+        _backendUniforms ??= backend.CreateBuffer(THSSS.Graphics.BufferKind.Uniform, EffectShaders.UniformSize);
+        WriteMatrix(EffectShaders.TransformOffset, transform.ToOpenGLMatrix());
+        WriteMatrix(EffectShaders.ProjectionOffset, projection.ToOpenGLMatrix());
+        var source = _parameters["xColoredTexture"] as Texture ?? SourceTexture;
+        bool Flipped(Texture texture) => backend.Features.OriginBottomLeft &&
+            texture != null && (texture.Usage & Usage.RenderTarget) != 0;
+        WriteInt(EffectShaders.FlagsOffset, Flipped(SourceTexture) ? 1 : 0);
+        WriteInt(EffectShaders.FlagsOffset + sizeof(int), Flipped(source) ? 1 : 0);
+        if (_kind == EffectKind.Warp)
+        {
+            WriteInt(EffectShaders.FlagsOffset + 2 * sizeof(int), (int)_parameters["ColorKey"]);
+            int offset = EffectShaders.WarpOffset;
+            foreach (string name in new[] { "X", "Y", "Time", "Radius" })
+            {
+                WriteFloat(offset, (float)_parameters[name]);
+                offset += sizeof(float);
+            }
+        }
+        if (_kind == EffectKind.Blur) WriteFloat(EffectShaders.BlurOffset, (float)_parameters["BlurLevel"]);
+        backend.BindTexture(source?.RenderTexture);
+        backend.SetSamplerState(EffectSampler);
+        backend.SetUniformBlock(0, _backendUniforms, _uniformData);
+    }
+
+    private void WriteMatrix(int offset, ReadOnlySpan<float> matrix)
+    {
+        for (int i = 0; i < matrix.Length; i++) WriteFloat(offset + i * sizeof(float), matrix[i]);
+    }
+    private void WriteFloat(int offset, float value) => BitConverter.TryWriteBytes(_uniformData.AsSpan(offset, sizeof(float)), value);
+    private void WriteInt(int offset, int value) => BitConverter.TryWriteBytes(_uniformData.AsSpan(offset, sizeof(int)), value);
     internal void Bind(Matrix transform, Matrix projection)
     {
         CommitChanges();
-        var gl = _device.GL ?? throw new InvalidOperationException("Effect binding requires an OpenGL context.");
+        if (_device.GL == null)
+        {
+            BindBackend(transform, projection);
+            return;
+        }
+        var gl = _device.GL;
         if (_program == 0) _program = EffectShaders.Create(gl, _kind);
         if (_sampler == 0)
         {
@@ -179,8 +229,7 @@ public class Effect : IDisposable
         }
         if (_parameters["xColoredTexture"] is Texture texture)
         {
-            gl.ActiveTexture(TextureUnit.Texture0);
-            gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
+            _device.RenderBackend.BindTexture(texture.RenderTexture);
         }
         if (!_bound)
         {
@@ -198,6 +247,10 @@ public class Effect : IDisposable
     }
     private void ReleaseGpu()
     {
+        _backendShader?.Dispose();
+        _backendUniforms?.Dispose();
+        _backendShader = null;
+        _backendUniforms = null;
         if (_program != 0) _device.GL.DeleteProgram(_program);
         if (_sampler != 0) _device.GL.DeleteSampler(_sampler);
         _program = _sampler = 0;

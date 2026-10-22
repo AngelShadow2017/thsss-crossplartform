@@ -48,8 +48,9 @@ public static class Program
         options.IsVisible = Environment.GetEnvironmentVariable("THSSS_WINDOW_HIDDEN") != "1";
         options.Size = new Silk.NET.Maths.Vector2D<int>(640, 480);
         options.VSync = false;
-        options.WindowBorder = WindowBorder.Fixed;
-        options.API = GraphicsAPI.Default;
+        options.WindowBorder = WindowBorder.Resizable;
+        options.API = THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.Vulkan
+            ? GraphicsAPI.None : GraphicsAPI.Default;
         options.PreferredDepthBufferBits = 24;
         options.PreferredStencilBufferBits = 8;
         options.Samples = new INI_RW("Setting.INI").IniReadValue("DirectX", "AntiAlias") == "1" ? 4 : 0;
@@ -60,6 +61,11 @@ public static class Program
         _window.Load += OnLoad;
         _window.Render += OnRender;
         try { _window.Run(); }
+        catch (Exception runError)
+        {
+            Console.Error.WriteLine("[Run] " + runError);
+            throw;
+        }
         finally
         {
             _inputBridge?.Dispose();
@@ -74,12 +80,31 @@ public static class Program
 
     private static void OnLoad()
     {
-        _gl = _window.CreateOpenGL();
-        Device.CurrentContext = _gl;
+        THSSS.Platform.GlfwNative.ConstrainGameAspect(_window);
+        if (THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.OpenGl)
+        {
+            _gl = _window.CreateOpenGL();
+            Device.CurrentContext = _gl;
+        }
+        // Resolve the native presentation handles before the game creates its device.
+        var pointer = THSSS.Platform.GlfwNative.WindowPointer(_window);
+        THSSS.Graphics.RenderBackendSelection.SurfaceSource =
+            THSSS.Platform.GlfwNative.Resolve(pointer);
+        if (Environment.GetEnvironmentVariable("THSSS_DIAG_VK") == "1")
+            Console.WriteLine($"[VK] platform={THSSS.Platform.GlfwNative.ActivePlatform()} pointer=0x{pointer:x} resolved={(THSSS.Graphics.RenderBackendSelection.SurfaceSource is null ? "no" : "yes")}");
+        if (THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.Vulkan
+            && THSSS.Graphics.RenderBackendSelection.SurfaceSource == null)
+            throw new PlatformNotSupportedException(
+                "The selected window backend did not provide a Vulkan presentation surface.");
         _input = _window.CreateInput();
         _game = new Game_Main();
         if (!_game.initSuccess) throw new InvalidOperationException("Game_Main initialisation failed; see the diagnostic message.");
         _game.Form_Main.AttachWindow(_window);
+        // Presenting backends create their swapchain here, once the window exists.
+        var size = _window.FramebufferSize;
+        _game.DeviceMain.RenderBackend.AttachPresentSurface(
+            size.X > 0 ? size.X : _game.DeviceMain.GameWidth,
+            size.Y > 0 ? size.Y : _game.DeviceMain.GameHeight);
         _inputBridge = new WindowInputBridge(_game.Form_Main, _input);
         _inputBridge.DevicesChanged += _game.RefreshInputDevices;
         _game.RefreshInputDevices();
@@ -92,19 +117,22 @@ public static class Program
             _game.RequestState(startState);
     }
 
+    private static readonly System.Diagnostics.Stopwatch FrameClock = new();
+    private static int _performanceFrames;
+    private static double _renderMilliseconds;
+
     private static void OnRender(double deltaTime)
     {
         if (_game == null || _window.IsClosing) return;
         _inputBridge.ApplyCursor();
+        _game.Form_Main.AllowAspectCorrection = THSSS.Platform.GlfwNative.ActivePlatform() != THSSS.Platform.GlfwNative.Platform.Wayland;
+        _game.Form_Main.EnsureWindowAspect();
 
         // The logical surface is fixed at 640x480; publish the real window size so
         // the sprite batcher can letterbox it exactly like the original window.
         var framebuffer = _window.FramebufferSize;
-        if (framebuffer.X > 0 && framebuffer.Y > 0)
-        {
-            _game.DeviceMain.FramebufferWidth = framebuffer.X;
-            _game.DeviceMain.FramebufferHeight = framebuffer.Y;
-        }
+        if (_window.WindowState == Silk.NET.Windowing.WindowState.Minimized
+            || !_game.DeviceMain.ResizeFramebuffer(framebuffer.X, framebuffer.Y)) return;
 
         _frame++;
 
@@ -115,7 +143,23 @@ public static class Program
 
         // MainProcess owns update + clear + draw for the whole frame, so it has to run
         // inside the render callback: GLFW presents the buffer right after it returns.
-        _game.MainProcess();
+        long renderStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        var backend = _game.DeviceMain.RenderBackend;
+        backend.BeginFrame();
+        try { _game.MainProcess(); }
+        finally { backend.EndFrame(); }
+        if (Environment.GetEnvironmentVariable("THSSS_DIAG_FPS") == "1")
+        {
+            _renderMilliseconds += System.Diagnostics.Stopwatch.GetElapsedTime(renderStart).TotalMilliseconds;
+            if (!FrameClock.IsRunning) FrameClock.Start();
+            if (++_performanceFrames == 120)
+            {
+                Console.WriteLine($"[FPS] frame={_frame} fps={120 / FrameClock.Elapsed.TotalSeconds:F2} mainMs={_renderMilliseconds / 120:F2}" +
+                    (_game.DeviceMain.RenderBackend is THSSS.Graphics.Vulkan.VulkanRenderBackend vk
+                        ? $" submits={vk.FrameSubmissions} draws={vk.FrameDraws}" : ""));
+                _performanceFrames = 0; _renderMilliseconds = 0; FrameClock.Restart();
+            }
+        }
         _inputBridge.ApplyCursor();
         if (_window.IsClosing) return;
         // P requests are captured only after this frame is drawn and before GLFW swaps.
@@ -175,10 +219,23 @@ public static class Program
         var size = _window.FramebufferSize;
         int width = size.X, height = size.Y;
         var pixels = new byte[width * height * 4];
-        fixed (byte* data = pixels)
+        if (_gl != null)
         {
-            _gl.ReadPixels(0, 0, (uint)width, (uint)height,
-                Silk.NET.OpenGL.GLEnum.Rgba, Silk.NET.OpenGL.GLEnum.UnsignedByte, data);
+            fixed (byte* data = pixels)
+                _gl.ReadPixels(0, 0, (uint)width, (uint)height,
+                    Silk.NET.OpenGL.GLEnum.Rgba, Silk.NET.OpenGL.GLEnum.UnsignedByte, data);
+        }
+        else
+        {
+            var backend = _game.DeviceMain.RenderBackend;
+            var draw = backend.CurrentDrawFramebuffer;
+            var read = backend.CurrentReadFramebuffer;
+            try
+            {
+                backend.RestoreFramebufferBindings(draw, null);
+                pixels = backend.ReadPixels(0, 0, width, height);
+            }
+            finally { backend.RestoreFramebufferBindings(draw, read); }
         }
         int nonBlack = 0;
         for (int i = 0; i < pixels.Length; i += 4)

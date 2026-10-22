@@ -1,5 +1,9 @@
 # Rendering compatibility tests (2026-10-20)
 
+## Resize/DPI acceptance (2026-10-24)
+
+`sh tools/run-resize-regressions.sh` from root runs `WindowResizeCompatibility` on both GL/Vulkan with temporary player data. X11 headless: `ALSOFT_DRIVERS=null xvfb-run -a sh tools/run-resize-regressions.sh`; omit Xvfb for native Wayland desktop. Covers six sizes/non4:3 correction, minimum/restore/fullscreen, stable swapchain generation, non-symmetric corner pixels, fullscreen black borders and GL errors. DPI framebuffer-only updates are also in WindowInputCompatibility/PresentationGeometryChecks. See docs/WINDOW_SCALING_2026.md for compositor override and untested physical multi-monitor limits.
+
 Run all commands from `src/` so `global.json` selects SDK 8. The installed SDK 10 workload manifests are incomplete; do not confuse that environment failure with a code failure.
 
 ## Acceptance suites
@@ -41,3 +45,7 @@ Numeric test results do not establish every-stage screenshot parity across GPUs.
 Final current behavior matrix: `../docs/BEHAVIOR_PARITY_FIXES_2026.md`. AudioCompatibility: 162 native/loopback assertions. SaveCompatibility: 84 assertions including valid ending LastStage=All and 3-digit legacy comma decimals. TextScreenshotCompatibility: 167 assertions plus logical backbuffer scaling and actual P-request-after-swap sequencing. WindowInputCompatibility: 109 assertions including two keyboard modes and a third complete Alt+F4 process. Historical BehaviorParityAudit is a repair-before snapshot, not a maintained acceptance tool; corrected Replay APIs may explicitly reject its formerly accepted malformed fixtures. Use the strict behavior runner, not the historic diagnostic, to verify fixes.
 
 - 2026-10-21 parity repairs: default System.Drawing.Font constructors now set Point (GDI+ default); FixedFPS deadline (`FinishFrameTiming`) owns live-window pacing with `gameOwnsPacing` disabling GLFW render cap. Tests: TextScreenshotCompatibility 171 incl unit/scale assertions; WindowInputCompatibility 4721 incl 144 deterministic timing scenarios and real-loop stall catch-up. See docs/PARITY_RECHECK_2026.md.
+
+## 双渲染后端验收（2026-10-23）
+
+`VulkanBackend/SpriteChecks.cs` 直接调用游戏实际 Sprite/MySprite、菜单图集与透明叠加，不以常量三角形代替2D链路验证；包括400次draw一次提交、不同变换/颜色的独立快照、跳过Present的EndFrame、静态字形缓存失效。`THSSS_DIAG_FPS=1` 输出实际FPS和每帧提交/draw；性能测试不同时开像素读回诊断。当前根脚本实际为9套渲染+6套行为，以suite入口计数，不能数PASS行。原生Wayland/X11及GL桌面证据见 `../docs/RENDER_BACKEND_STATUS_2026.md`。所有实际游戏测试使用临时配置/Score与独立录像目录，不写live game/玩家数据。

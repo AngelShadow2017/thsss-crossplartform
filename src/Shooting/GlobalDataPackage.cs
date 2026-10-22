@@ -82,6 +82,11 @@ public class GlobalDataPackage
 	public void LoadResources1()
 	{
 		ScreenTexMan = new ScreenTexManager(DeviceMain);
+		// Only some frames composite through the offscreen levels (splash, stages, ED). The
+		// main menu draws straight into the default frame once its fade-in ends, so present
+		// the composite only while a level is actually active and otherwise the default frame.
+		DeviceMain.PresentSourceProvider ??= () =>
+			ScreenTexMan?.ActiveComposite?.RenderTexture;
 		LoadEffect();
 		LoadingList = new List<string>();
 		LoadFolderTextureList("Image");

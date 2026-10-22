@@ -235,8 +235,9 @@ public class Game_Main
 			GlobalData.SpriteMain = new MySprite(DeviceMain);
 			return true;
 		}
-		catch
+		catch (Exception initError)
 		{
+			Console.Error.WriteLine("[Direct3D Init] " + initError);
 			MessageBox.Show("DirectX初始化失败", "DirectX Initial Error");
 			return false;
 		}

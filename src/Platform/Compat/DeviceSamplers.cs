@@ -16,8 +16,19 @@ public partial class Device
     }
     internal void ApplySamplerState()
     {
-        if (_sampler0 == 0) _sampler0 = GL.GenSampler();
         int State(SamplerState state,int fallback) => _samplerStates.TryGetValue((0,state),out int value) ? value : fallback;
+        if (GL == null)
+        {
+            int border = State(SamplerState.BorderColor,0);
+            RenderBackend.SetSamplerState(new THSSS.Graphics.SamplerStateBlock(
+                State(SamplerState.AddressU,1), State(SamplerState.AddressV,1),
+                State(SamplerState.MinFilter,1), State(SamplerState.MagFilter,1),
+                State(SamplerState.MipFilter,0), State(SamplerState.MaxAnisotropy,1),
+                BitConverter.Int32BitsToSingle(State(SamplerState.MipMapLodBias,0)),
+                ((border>>16)&255)/255f, ((border>>8)&255)/255f, (border&255)/255f, ((border>>24)&255)/255f, false));
+            return;
+        }
+        if (_sampler0 == 0) _sampler0 = GL.GenSampler();
         int Address(int value) => value switch
         {
             (int)TextureAddress.Mirror => (int)GLEnum.MirroredRepeat,

@@ -1,11 +1,12 @@
 using System;
 using Silk.NET.OpenGL;
+using THSSS.Graphics;
 
 namespace SlimDX.Direct3D9;
 
 internal static class EffectShaders
 {
-    private const string Vertex = @"#version 330 core
+    internal const string Vertex = @"#version 330 core
 layout(location=0) in vec3 aPosition;
 layout(location=1) in vec2 aTexCoord;
 layout(location=2) in vec4 aColor;
@@ -69,18 +70,65 @@ void main() {
     FragColor = color;
 }";
 
+    private const int VectorSize = 4 * sizeof(float);
+    private const int MatrixSize = 4 * VectorSize;
+    internal const int TransformOffset = 0;
+    internal const int ProjectionOffset = TransformOffset + MatrixSize;
+    internal const int FlagsOffset = ProjectionOffset + MatrixSize;
+    internal const int WarpOffset = FlagsOffset + VectorSize;
+    internal const int BlurOffset = WarpOffset + VectorSize;
+    internal const int UniformSize = BlurOffset + VectorSize;
+
+    internal static string Fragment(EffectKind kind) => Header + (kind switch
+    {
+        EffectKind.Blur => Blur,
+        EffectKind.Warp => Warp,
+        _ => "void main() { FragColor = sampleSource(logicalUV()); }"
+    });
+
+    internal static ShaderSource BackendSource(EffectKind kind) => new()
+    {
+        Vertex = WithUniformBlock(Vertex),
+        Fragment = WithUniformBlock(Fragment(kind)),
+        VertexInputs = new[] { "aPosition", "aTexCoord", "aColor" },
+    };
+
+    private static string WithUniformBlock(string source)
+    {
+        string block = $@"layout (std140) uniform EffectUniforms {{
+    layout(offset = {TransformOffset}) mat4 effectTransform;
+    layout(offset = {ProjectionOffset}) mat4 effectProjection;
+    layout(offset = {FlagsOffset}) ivec4 effectFlags;
+    layout(offset = {WarpOffset}) vec4 effectWarp;
+    layout(offset = {BlurOffset}) vec4 effectBlur;
+}};
+#define uTransform effectTransform
+#define uProjection effectProjection
+#define uInputFlip (effectFlags.x != 0)
+#define uSourceFlip (effectFlags.y != 0)
+#define ColorKey effectFlags.z
+#define X effectWarp.x
+#define Y effectWarp.y
+#define Time effectWarp.z
+#define Radius effectWarp.w
+#define BlurLevel effectBlur.x
+";
+        foreach (string declaration in new[] {
+            "uniform mat4 uTransform;", "uniform mat4 uProjection;",
+            "uniform bool uSourceFlip;", "uniform bool uInputFlip;",
+            "uniform float BlurLevel;", "uniform float X, Y, Time, Radius;",
+            "uniform int ColorKey;" })
+            source = source.Replace(declaration, string.Empty, StringComparison.Ordinal);
+        return source.Replace("#version 330 core", "#version 330 core\n" + block, StringComparison.Ordinal);
+    }
+
     internal static uint Create(GL gl, EffectKind kind)
     {
         uint vertex = Compile(gl, ShaderType.VertexShader, Vertex);
         uint fragment = 0, program = 0;
         try
         {
-            string body = kind switch {
-                EffectKind.Blur => Blur,
-                EffectKind.Warp => Warp,
-                _ => "void main() { FragColor = sampleSource(logicalUV()); }"
-            };
-            fragment = Compile(gl, ShaderType.FragmentShader, Header + body);
+            fragment = Compile(gl, ShaderType.FragmentShader, Fragment(kind));
             program = gl.CreateProgram();
             gl.AttachShader(program, vertex);
             gl.AttachShader(program, fragment);

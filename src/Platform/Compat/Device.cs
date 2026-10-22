@@ -31,8 +31,11 @@ public partial class Device : IDisposable
     public Device(Direct3D direct3D, int adapter, DeviceType deviceType, IntPtr handle,
                   CreateFlags createFlags, PresentParameters parameters)
     {
-        GL = CurrentContext ?? throw new InvalidOperationException(
-            "Direct3D9.Device requires the OpenGL context published by the window layer.");
+        // Only the GL backend needs the window context; other backends own their device.
+        GL = CurrentContext;
+        if (THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.OpenGl && GL == null)
+            throw new InvalidOperationException(
+                "Direct3D9.Device requires the OpenGL context published by the window layer.");
         Width = parameters.BackBufferWidth > 0 ? parameters.BackBufferWidth : 640;
         Height = parameters.BackBufferHeight > 0 ? parameters.BackBufferHeight : 480;
         GameWidth = Width;
@@ -42,7 +45,36 @@ public partial class Device : IDisposable
 
     public static GL CurrentContext { get; set; }
 
+    private THSSS.Graphics.IRenderTexture _whiteFallback;
+    /// <summary>Opaque one-pixel texture used when a stage has nothing bound (D3D9 default).</summary>
+    internal THSSS.Graphics.IRenderTexture WhiteFallbackTexture
+        => _whiteFallback ??= CreateWhiteFallback();
+
+    private THSSS.Graphics.IRenderTexture CreateWhiteFallback()
+    {
+        var tex = RenderBackend.CreateTexture(1, 1, THSSS.Graphics.TextureFormat.Rgba8,
+            new byte[] { 255, 255, 255, 255 });
+        return tex;
+    }
+
+    /// <summary>
+    /// The GL context is still what the window layer hands over; the backend wraps it
+    /// so the rest of the compatibility layer only sees IRenderBackend.
+    /// </summary>
     public GL GL { get; }
+
+    private THSSS.Graphics.IRenderBackend _renderBackend;
+    public THSSS.Graphics.IRenderBackend RenderBackend => _renderBackend ??= CreateBackend();
+
+    private THSSS.Graphics.IRenderBackend CreateBackend()
+        => THSSS.Graphics.RenderBackendSelection.Requested switch
+        {
+            THSSS.Graphics.BackendKind.OpenGl => new THSSS.Graphics.OpenGl.OpenGlRenderBackend(GL),
+            THSSS.Graphics.BackendKind.Vulkan => new THSSS.Graphics.Vulkan.VulkanRenderBackend(
+                THSSS.Graphics.RenderBackendSelection.SurfaceSource),
+            _ => throw new PlatformNotSupportedException(
+                "Unsupported renderer: " + THSSS.Graphics.RenderBackendSelection.Requested),
+        };
 
     public int Width { get; private set; }
 
@@ -57,6 +89,16 @@ public partial class Device : IDisposable
     public int FramebufferWidth { get; set; }
 
     public int FramebufferHeight { get; set; }
+
+    public bool ResizeFramebuffer(int width, int height)
+    {
+        if (width <= 0 || height <= 0) return false;
+        if (FramebufferWidth == width && FramebufferHeight == height) return true;
+        RenderBackend.Resize(width, height);
+        FramebufferWidth = width;
+        FramebufferHeight = height;
+        return true;
+    }
 
     public Viewport Viewport { get; set; }
 
@@ -74,13 +116,13 @@ public partial class Device : IDisposable
 
     private void AttachDepthSurface()
     {
-        if (RenderTarget == null) return;
-        uint depth = _depthStencilSurface != null
-            && _depthStencilSurface.Width == RenderTarget.Width
-            && _depthStencilSurface.Height == RenderTarget.Height
-            ? _depthStencilSurface.DepthBuffer : 0;
-        GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer,
-            FramebufferAttachment.DepthAttachment, RenderbufferTarget.Renderbuffer, depth);
+        // Without an explicit D3D9 depth surface the target keeps whatever depth it was
+        // created with; overwriting the attachment with 0 would disable depth testing.
+        if (_depthStencilSurface == null) return;
+        int width = RenderTarget?.Width ?? (FramebufferWidth > 0 ? FramebufferWidth : GameWidth);
+        int height = RenderTarget?.Height ?? (FramebufferHeight > 0 ? FramebufferHeight : GameHeight);
+        bool matches = _depthStencilSurface.Width == width && _depthStencilSurface.Height == height;
+        RenderBackend.AttachDepth(matches ? _depthStencilSurface.DepthSurface : null);
     }
 
     // Fixed-function shader state forwarded into the OpenGL 3D pipeline.
@@ -120,9 +162,23 @@ public partial class Device : IDisposable
     private bool _depthWriteEnabled = true;
     private BlendOperation _blendOperation = BlendOperation.Add;
     internal bool DepthWriteEnabled => _depthWriteEnabled;
+
+    private static THSSS.Graphics.BlendFactor ToContract(BlendingFactor factor) => factor switch
+    {
+        BlendingFactor.Zero => THSSS.Graphics.BlendFactor.Zero,
+        BlendingFactor.One => THSSS.Graphics.BlendFactor.One,
+        BlendingFactor.SrcColor => THSSS.Graphics.BlendFactor.SourceColor,
+        BlendingFactor.OneMinusSrcColor => THSSS.Graphics.BlendFactor.InverseSourceColor,
+        BlendingFactor.SrcAlpha => THSSS.Graphics.BlendFactor.SourceAlpha,
+        BlendingFactor.OneMinusSrcAlpha => THSSS.Graphics.BlendFactor.InverseSourceAlpha,
+        BlendingFactor.DstColor => THSSS.Graphics.BlendFactor.DestinationColor,
+        BlendingFactor.OneMinusDstColor => THSSS.Graphics.BlendFactor.InverseDestinationColor,
+        BlendingFactor.DstAlpha => THSSS.Graphics.BlendFactor.DestinationAlpha,
+        BlendingFactor.OneMinusDstAlpha => THSSS.Graphics.BlendFactor.InverseDestinationAlpha,
+        _ => THSSS.Graphics.BlendFactor.SourceAlphaSaturate,
+    };
     public void SetRenderState(RenderState state, int value)
     {
-        if (GL == null) return;
         Pipeline3D.SetState(state, value);
         if (state is RenderState.FogStart or RenderState.FogEnd or RenderState.FogDensity)
             Pipeline3D.SetState(state, BitConverter.Int32BitsToSingle(value));
@@ -130,33 +186,33 @@ public partial class Device : IDisposable
         {
             case RenderState.AlphaBlendEnable:
                 _alphaBlendEnabled = value != 0;
-                SetCapability(Silk.NET.OpenGL.EnableCap.Blend, value != 0);
+                ApplyBlendState();
                 break;
             case RenderState.ZWriteEnable:
                 _depthWriteEnabled = value != 0;
-                GL.DepthMask(_depthWriteEnabled);
+                RenderBackend.SetDepthWrite(_depthWriteEnabled);
                 break;
             case RenderState.BlendOperation:
                 _blendOperation = (BlendOperation)value;
                 ApplyBlendState();
                 break;
             case RenderState.MultisampleAntialias:
-                SetCapability(Silk.NET.OpenGL.EnableCap.Multisample, value != 0);
+                SetCapability(THSSS.Graphics.BackendCapability.Multisample, value != 0);
                 break;
             case RenderState.ZEnable:
-                SetCapability(Silk.NET.OpenGL.EnableCap.DepthTest, value != 0);
+                SetCapability(THSSS.Graphics.BackendCapability.DepthTest, value != 0);
                 Pipeline3D.SetDepthTest(value != 0);
                 break;
             case RenderState.ScissorTestEnable:
-                SetCapability(Silk.NET.OpenGL.EnableCap.ScissorTest, value != 0);
+                SetCapability(THSSS.Graphics.BackendCapability.ScissorTest, value != 0);
                 break;
             case RenderState.SrcBlend: // same slot as SourceBlend (19)
                 _sourceBlend = ToBlendingFactor(value);
-                GL.BlendFunc(_sourceBlend, _destinationBlend);
+                ApplyBlendState();
                 break;
             case RenderState.DestBlend: // same slot as DestinationBlend (20)
                 _destinationBlend = ToBlendingFactor(value);
-                GL.BlendFunc(_sourceBlend, _destinationBlend);
+                ApplyBlendState();
                 break;
         }
     }
@@ -179,11 +235,8 @@ public partial class Device : IDisposable
 
     public int GetRenderState(RenderState state) => 0;
 
-    private void SetCapability(Silk.NET.OpenGL.EnableCap capability, bool enabled)
-    {
-        if (enabled) GL.Enable(capability);
-        else GL.Disable(capability);
-    }
+    private void SetCapability(THSSS.Graphics.BackendCapability capability, bool enabled)
+        => RenderBackend.SetCapability(capability, enabled);
 
     /// <summary>D3DBLEND_* constants to GL factors. 1 is ZERO and 2 is ONE.</summary>
     private static BlendingFactor ToBlendingFactor(int value) => value switch
@@ -257,9 +310,26 @@ public partial class Device : IDisposable
     public void EndScene() { }
 
     /// <summary>GLFW presents the default framebuffer after the render callback.</summary>
-    public void Present() { }
+    public void Present()
+    {
+        if (PresentSourceProvider is { } provide)
+            RenderBackend.SetPresentSource(provide());
+        (RenderBackend as THSSS.Graphics.Vulkan.VulkanRenderBackend)?.NotePresentState();
+        RenderBackend.Present();
+        if (GL != null) FramebufferPresent?.Invoke();
+    }
 
-    public void Present(Present flags) { }
+    /// <summary>Window swap for the GL backend, installed by the window layer.</summary>
+    public static Action? FramebufferPresent { get; set; }
+
+    /// <summary>
+    /// Supplies the texture holding the finished frame, which presenting backends blit to
+    /// the window. GL ignores it; the window swaps its own back buffer.
+    /// </summary>
+    public Func<THSSS.Graphics.IRenderTexture?>? PresentSourceProvider { get; set; }
+
+    /// <summary>The game presents through this overload; both forms reach the backend.</summary>
+    public void Present(Present flags) => Present();
 
     // ---- immediate geometry ----------------------------------------------
     // User geometry and the shipped models share the same validated 3D stream path.
@@ -307,16 +377,18 @@ public partial class Device : IDisposable
     /// <summary>Applies the blend mode the game configured for the next draw.</summary>
     internal void ApplyBlendState()
     {
-        SetCapability(Silk.NET.OpenGL.EnableCap.Blend, _alphaBlendEnabled);
-        GL.BlendFunc(_sourceBlend, _destinationBlend);
-        GL.BlendEquation(_blendOperation switch
-        {
-            BlendOperation.Subtract => BlendEquationModeEXT.FuncSubtract,
-            BlendOperation.RevSubtract => BlendEquationModeEXT.FuncReverseSubtract,
-            BlendOperation.Min => BlendEquationModeEXT.Min,
-            BlendOperation.Max => BlendEquationModeEXT.Max,
-            _ => BlendEquationModeEXT.FuncAdd,
-        });
+        RenderBackend.SetBlendState(new THSSS.Graphics.BlendState(
+            _alphaBlendEnabled,
+            ToContract(_sourceBlend),
+            ToContract(_destinationBlend),
+            _blendOperation switch
+            {
+                BlendOperation.Subtract => THSSS.Graphics.BlendEquation.Subtract,
+                BlendOperation.RevSubtract => THSSS.Graphics.BlendEquation.ReverseSubtract,
+                BlendOperation.Min => THSSS.Graphics.BlendEquation.Min,
+                BlendOperation.Max => THSSS.Graphics.BlendEquation.Max,
+                _ => THSSS.Graphics.BlendEquation.Add,
+            }));
     }
 
     internal (BlendingFactor Source, BlendingFactor Destination, BlendOperation Operation, bool Enabled) CaptureBlendState()
@@ -351,21 +423,18 @@ public partial class Device : IDisposable
     {
         int width = FramebufferWidth > 0 ? FramebufferWidth : GameWidth;
         int height = FramebufferHeight > 0 ? FramebufferHeight : GameHeight;
-        float scale = Math.Min((float)width / GameWidth,(float)height / GameHeight);
-        int contentWidth = Math.Max(1,(int)(GameWidth * scale));
-        int contentHeight = Math.Max(1,(int)(GameHeight * scale));
-        return new Surface(GL,GameWidth,GameHeight,false)
+        var content = THSSS.Graphics.PresentationGeometry.Fit(width, height, GameWidth, GameHeight);
+        return new Surface(RenderBackend,GameWidth,GameHeight,false)
         {
-            ReadbackRegion = new System.Drawing.Rectangle((width-contentWidth)/2,(height-contentHeight)/2,contentWidth,contentHeight)
+            ReadbackRegion = new System.Drawing.Rectangle(content.X, content.Y, content.Width, content.Height)
         };
     }
     public Surface GetDepthStencilSurface() => DepthStencilSurface;
 
     public void SetRenderTarget(int index, Surface surface)
     {
-        if (GL == null) return;
         RenderTarget = surface;
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, surface?.FBO ?? 0);
+        RenderBackend.BindFramebuffer(surface?.Framebuffer);
         Viewport = new Viewport(0, 0, surface?.Width ?? GameWidth, surface?.Height ?? GameHeight, 0, 1);
         AttachDepthSurface();
     }
@@ -374,7 +443,11 @@ public partial class Device : IDisposable
 
     public void Clear(ClearFlags flags, System.Drawing.Color color, float z, int stencil)
     {
-        if (GL == null) return;
+        if (GL == null)
+        {
+            RenderBackend.Clear(BackendClearMask(flags), color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f, z, stencil);
+            return;
+        }
         GL.Disable(Silk.NET.OpenGL.EnableCap.ScissorTest);
         int width = RenderTarget?.Width ?? Math.Max(1, FramebufferWidth > 0 ? FramebufferWidth : Viewport.Width);
         int height = RenderTarget?.Height ?? Math.Max(1, FramebufferHeight > 0 ? FramebufferHeight : Viewport.Height);
@@ -392,7 +465,11 @@ public partial class Device : IDisposable
 
     public void Clear(ClearFlags flags, Color4 color, float z, int stencil)
     {
-        if (GL == null) return;
+        if (GL == null)
+        {
+            RenderBackend.Clear(BackendClearMask(flags), color.Red, color.Green, color.Blue, color.Alpha, z, stencil);
+            return;
+        }
         GL.Disable(Silk.NET.OpenGL.EnableCap.ScissorTest);
         GL.ClearColor(color.Red, color.Green, color.Blue, color.Alpha);
         GL.ClearDepth(z);
@@ -401,6 +478,11 @@ public partial class Device : IDisposable
         GL.Clear(ToClearMask(flags));
         GL.DepthMask(_depthWriteEnabled);
     }
+
+    private static THSSS.Graphics.ClearMask BackendClearMask(ClearFlags flags)
+        => ((flags & ClearFlags.Target) != 0 ? THSSS.Graphics.ClearMask.Color : 0)
+         | ((flags & ClearFlags.ZBuffer) != 0 ? THSSS.Graphics.ClearMask.Depth : 0)
+         | ((flags & ClearFlags.Stencil) != 0 ? THSSS.Graphics.ClearMask.Stencil : 0);
 
     private static ClearBufferMask ToClearMask(ClearFlags flags)
     {
@@ -412,10 +494,10 @@ public partial class Device : IDisposable
     }
 
     public Surface CreateOffscreenPlainSurface(int width, int height, Format format, Pool pool)
-        => new(GL, width, height, false);
+        => new(RenderBackend, width, height, false);
 
     public Surface CreateRenderTarget(int width, int height, Format format, MultiSampleType multiSample, int quality, bool lockable)
-        => new(GL, width, height, true);
+        => new(RenderBackend, width, height, true);
 
     public Texture CreateTexture(int width, int height, int levels, Usage usage, Format format, Pool pool)
         => new(this, width, height, levels, usage, format, pool);

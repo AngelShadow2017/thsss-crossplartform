@@ -1,5 +1,7 @@
 # 文档入口
 
+4:3连续窗口缩放与DPI：[WINDOW_SCALING_2026.md](WINDOW_SCALING_2026.md)（2026-10-24，含平台限制与回归入口）。
+
 当前状态优先看“修复与验收”，审计文件保留的是修复前快照。
 
 最新复查（2026-10-21）：[PARITY_RECHECK_2026.md](PARITY_RECHECK_2026.md)。发现默认字体单位与 FixedFPS 追帧仍有差异；此前修复报告不能据此解释为完全一致。
@@ -14,3 +16,5 @@
 目录整理后的入口：源码 `../src/`、运行数据 `../game/`、原版参考 `../reference/`。根目录 README 提供启动、构建和回归命令。
 
 本轮目录迁移与数据备份说明：[WORKSPACE_LAYOUT_2026.md](WORKSPACE_LAYOUT_2026.md)。
+
+渲染后端（GL / Vulkan）当前状态与边界：[RENDER_BACKEND_STATUS_2026.md](RENDER_BACKEND_STATUS_2026.md)。

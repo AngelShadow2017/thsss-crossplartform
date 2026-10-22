@@ -13,6 +13,28 @@ public class RenderForm : Form
     private bool _vsync;
     private int _interval = 1;
     private bool _gameOwnsPacing;
+    private Size _lastAspectSize = new(640, 480);
+    private Size _lastNonAspectSize;
+    public bool AllowAspectCorrection { get; set; } = true;
+
+    public void EnsureWindowAspect()
+    {
+        if (!AllowAspectCorrection) return;
+        if (_window == null || _fullscreen || _window.WindowState is Silk.NET.Windowing.WindowState.Fullscreen or Silk.NET.Windowing.WindowState.Minimized) return;
+        var size = ClientSize;
+        if (size.Width <= 0 || size.Height <= 0) return;
+        if ((long)size.Width * 3 == (long)size.Height * 4)
+        {
+            _lastAspectSize = size;
+            _lastNonAspectSize = Size.Empty;
+            return;
+        }
+        if (size == _lastNonAspectSize) return;
+        _lastNonAspectSize = size;
+        bool widthChanged = Math.Abs(size.Width - _lastAspectSize.Width) * 3 >= Math.Abs(size.Height - _lastAspectSize.Height) * 4;
+        int units = Math.Max(1, (int)Math.Round(widthChanged ? size.Width / 4.0 : size.Height / 3.0));
+        ClientSize = new Size(units * 4, units * 3);
+    }
 
     public IWindow Window => _window;
     public override bool Focused => _focused;

@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Silk.NET.OpenGL;
+using THSSS.Graphics;
+using THSSS.Graphics.OpenGl;
 
 namespace SlimDX.Direct3D9;
 
@@ -9,8 +12,12 @@ internal sealed class Device3D : IDisposable
     private readonly Device _device;
     private readonly GL _gl;
     private uint _program;
+    private IRenderShader _shader;
     private uint _vao;
     private int _worldLocation, _viewLocation, _projectionLocation, _textureLocation, _colourLocation;
+    /// <summary>Attribute presence computed by BuildLayout for the current draw.</summary>
+    private (bool HasColour, bool PackedColour, bool HasNormal, bool HasSecondary, bool PackedSecondary) AttributePresence;
+    private THSSS.Graphics.IRenderBuffer _projBlock;
     private readonly Matrix4x4[] _transforms = new Matrix4x4[4];
     private VertexBuffer _stream;
     private VertexDeclaration _declaration;
@@ -37,7 +44,7 @@ internal sealed class Device3D : IDisposable
         _gl = gl;
         for (int i = 0; i < _transforms.Length; i++) _transforms[i] = Matrix4x4.Identity;
         CreateProgram();
-        _vao = _gl.GenVertexArray();
+
     }
 
     private void CreateProgram()
@@ -48,29 +55,14 @@ layout(location=1) in vec2 aTexCoord;
 layout(location=2) in vec3 aNormal;
 layout(location=3) in vec4 aColour;
 layout(location=4) in vec4 aSecondary;
-uniform bool uHasColour, uPackedColour, uHasNormal, uLighting;
-uniform bool uHasSecondary, uPackedSecondary, uColorVertex, uNormalizeNormals, uSpecularEnabled;
-uniform int uDiffuseSource, uAmbientSource, uEmissiveSource, uSpecularSource;
-uniform vec4 uColour;
-uniform vec3 uAmbientLight;
-uniform vec4 uMaterialAmbient, uMaterialEmissive;
-uniform vec3 uSpecular;
-uniform float uPower;
-uniform int uLightCount;
-uniform vec3 uLightDirection[8];
-uniform vec3 uLightDiffuse[8];
-uniform vec3 uLightSpecular[8];
 out vec4 VertexColour;
 out vec3 VertexSpecular;
-uniform bool uLocalViewer;
-uniform mat4 uWorld;
-uniform mat4 uView;
-uniform mat4 uProjection;
+layout (std140) uniform ProjectionBlock { mat4 uProjection; vec4 uColour; int uFogMode; mat4 uWorld; mat4 uView; int uLighting; int uHasColour; int uPackedColour; int uHasNormal; int uHasSecondary; int uPackedSecondary; int uColorVertex; int uNormalizeNormals; int uSpecularEnabled; int uDiffuseSource; int uAmbientSource; int uEmissiveSource; int uSpecularSource; int uLocalViewer; int uLightCount; vec3 uAmbientLight; vec3 uSpecular; float uPower; vec3 uFogColour; vec3 uFogParams; vec4 uMaterialAmbient; vec4 uMaterialEmissive; vec3 uLightDirection[4]; vec3 uLightDiffuse[4]; vec3 uLightSpecular[4]; };
 out vec2 TexCoord;
 out float FogDepth;
 vec4 sourceColour(int source, vec4 material, vec4 primary, vec4 secondary) {
-    if (uColorVertex && source == 1 && uHasColour) return primary;
-    if (uColorVertex && source == 2 && uHasSecondary) return secondary;
+    if (uColorVertex != 0 && source == 1 && uHasColour != 0) return primary;
+    if (uColorVertex != 0 && source == 2 && uHasSecondary != 0) return secondary;
     return material;
 }
 void main() {
@@ -80,26 +72,26 @@ void main() {
     clip.z = 2.0 * clip.z - clip.w;
     gl_Position = clip;
     TexCoord = aTexCoord;
-    vec4 vertex = uPackedColour ? aColour.bgra : aColour;
-    vec4 secondary = uPackedSecondary ? aSecondary.bgra : aSecondary;
-    VertexColour = uHasColour ? vertex : uColour;
-    VertexSpecular = uSpecularEnabled && uHasSecondary ? secondary.rgb : vec3(0);
-    if (uLighting) {
+    vec4 vertex = uPackedColour != 0 ? aColour.bgra : aColour;
+    vec4 secondary = uPackedSecondary != 0 ? aSecondary.bgra : aSecondary;
+    VertexColour = uHasColour != 0 ? vertex : uColour;
+    VertexSpecular = uSpecularEnabled != 0 && uHasSecondary != 0 ? secondary.rgb : vec3(0);
+    if (uLighting != 0) {
         vec4 diffuse = sourceColour(uDiffuseSource, uColour, vertex, secondary);
         vec3 ambient = sourceColour(uAmbientSource, uMaterialAmbient, vertex, secondary).rgb;
         vec3 emission = sourceColour(uEmissiveSource, uMaterialEmissive, vertex, secondary).rgb;
         vec3 specular = sourceColour(uSpecularSource, vec4(uSpecular,1.0), vertex, secondary).rgb;
         vec3 lit = ambient * uAmbientLight + emission;
         VertexSpecular = vec3(0);
-        if (uHasNormal) {
+        if (uHasNormal != 0) {
             vec3 normal = transpose(inverse(mat3(uView * uWorld))) * aNormal;
-            if (uNormalizeNormals && dot(normal,normal) > 0.0) normal = normalize(normal);
+            if (uNormalizeNormals != 0 && dot(normal,normal) > 0.0) normal = normalize(normal);
             for (int i=0; i<uLightCount; i++) {
                 vec3 light = normalize(-uLightDirection[i]);
                 float amount = max(dot(normal, light), 0.0);
                 lit += diffuse.rgb * uLightDiffuse[i] * amount;
                 if (amount > 0.0 && uPower > 0.0) {
-                    vec3 viewer = uLocalViewer ? normalize(-eye.xyz) : vec3(0,0,-1);
+                    vec3 viewer = uLocalViewer != 0 ? normalize(-eye.xyz) : vec3(0,0,-1);
                     vec3 halfVector = normalize(light + viewer);
                     VertexSpecular += specular * uLightSpecular[i] * pow(max(dot(normal,halfVector),0.0),uPower);
                 }
@@ -112,13 +104,11 @@ void main() {
         const string fragment = @"#version 330 core
 in vec2 TexCoord;
 out vec4 FragColor;
+layout (std140) uniform ProjectionBlock { mat4 uProjection; vec4 uColour; int uFogMode; mat4 uWorld; mat4 uView; int uLighting; int uHasColour; int uPackedColour; int uHasNormal; int uHasSecondary; int uPackedSecondary; int uColorVertex; int uNormalizeNormals; int uSpecularEnabled; int uDiffuseSource; int uAmbientSource; int uEmissiveSource; int uSpecularSource; int uLocalViewer; int uLightCount; vec3 uAmbientLight; vec3 uSpecular; float uPower; vec3 uFogColour; vec3 uFogParams; vec4 uMaterialAmbient; vec4 uMaterialEmissive; vec3 uLightDirection[4]; vec3 uLightDiffuse[4]; vec3 uLightSpecular[4]; };
 uniform sampler2D uTexture;
 in vec4 VertexColour;
 in vec3 VertexSpecular;
 in float FogDepth;
-uniform int uFogMode;
-uniform vec3 uFogColour;
-uniform vec3 uFogParams;
 void main() {
     vec4 colour = texture(uTexture, TexCoord) * VertexColour;
     colour.rgb += VertexSpecular;
@@ -128,33 +118,15 @@ void main() {
     if (uFogMode == 2) visibility = clamp(exp(-pow(uFogParams.z * FogDepth, 2.0)), 0.0, 1.0);
     FragColor = vec4(mix(uFogColour, colour.rgb, visibility), colour.a);
 }";
-        uint vs = Compile(ShaderType.VertexShader, vertex);
-        uint fs = Compile(ShaderType.FragmentShader, fragment);
-        _program = _gl.CreateProgram();
-        _gl.AttachShader(_program, vs);
-        _gl.AttachShader(_program, fs);
-        _gl.LinkProgram(_program);
-        _gl.GetProgram(_program, ProgramPropertyARB.LinkStatus, out int linked);
-        if (linked == 0) throw new InvalidOperationException(_gl.GetProgramInfoLog(_program));
-        _gl.DetachShader(_program, vs);
-        _gl.DetachShader(_program, fs);
-        _gl.DeleteShader(vs);
-        _gl.DeleteShader(fs);
-        _worldLocation = _gl.GetUniformLocation(_program, "uWorld");
-        _viewLocation = _gl.GetUniformLocation(_program, "uView");
-        _projectionLocation = _gl.GetUniformLocation(_program, "uProjection");
-        _textureLocation = _gl.GetUniformLocation(_program, "uTexture");
-        _colourLocation = _gl.GetUniformLocation(_program, "uColour");
-    }
-
-    private uint Compile(ShaderType type, string source)
-    {
-        uint shader = _gl.CreateShader(type);
-        _gl.ShaderSource(shader, source);
-        _gl.CompileShader(shader);
-        _gl.GetShader(shader, ShaderParameterName.CompileStatus, out int compiled);
-        if (compiled == 0) throw new InvalidOperationException(_gl.GetShaderInfoLog(shader));
-        return shader;
+        // One program per Device3D; the backend compiles and owns it.
+        var source = new ShaderSource { Vertex = vertex, Fragment = fragment, VertexInputs = new[] { "aPosition", "aTexCoord", "aNormal", "aColour", "aSecondary" } };
+        _shader = _device.RenderBackend.CreateShader(source);
+        _program = _shader.Handle is OpenGlHandle glProgram ? glProgram.Id : 0;
+        _worldLocation = _shader.GetUniformLocation("uWorld");
+        _viewLocation = _shader.GetUniformLocation("uView");
+        _projectionLocation = _shader.GetUniformLocation("uProjection");
+        _textureLocation = _shader.GetUniformLocation("uTexture");
+        _colourLocation = _shader.GetUniformLocation("uColour");
     }
 
     internal void SetTransform(TransformState state, Matrix matrix) => _transforms[(int)state] = matrix.ToSystemMatrix();
@@ -230,80 +202,88 @@ void main() {
             _ => Silk.NET.OpenGL.PrimitiveType.Triangles,
         };
         _device.ApplyBlendState();
-        if (_cull == Cull.None) _gl.Disable(Silk.NET.OpenGL.EnableCap.CullFace);
-        else
+        _device.RenderBackend.SetCullMode(_cull switch
         {
-            _gl.Enable(Silk.NET.OpenGL.EnableCap.CullFace);
-            _gl.FrontFace(FrontFaceDirection.Ccw);
-            _gl.CullFace(_cull == Cull.Clockwise ? GLEnum.Front : GLEnum.Back);
-        }
-        _gl.DepthMask(_device.DepthWriteEnabled);
-        if (_depthTest) { _gl.Enable(Silk.NET.OpenGL.EnableCap.DepthTest); _gl.DepthFunc(DepthFunction.Lequal); }
-        else _gl.Disable(Silk.NET.OpenGL.EnableCap.DepthTest);
-        _gl.UseProgram(_program);
-        UploadMatrix(_worldLocation, World);
-        UploadMatrix(_viewLocation, View);
-        UploadMatrix(_projectionLocation, Projection);
+            Cull.Clockwise => CullMode.Clockwise,
+            Cull.Counterclockwise => CullMode.CounterClockwise,
+            _ => CullMode.None,
+        });
+        _device.RenderBackend.SetDepthWrite(_device.DepthWriteEnabled);
+        _device.RenderBackend.SetDepthTest(_depthTest);
+        _device.RenderBackend.BindFramebuffer(_device.RenderTarget?.Framebuffer);
+        _shader.Use();
         var diffuse = _material.Diffuse;
-        if (_lighting)
-        {
-            float r = _ambient.R / 255f, g = _ambient.G / 255f, b = _ambient.B / 255f;
-            foreach (int index in _enabledLights)
-                if (_lights.TryGetValue(index, out var light))
-                { r += light.Ambient.R / 255f; g += light.Ambient.G / 255f; b += light.Ambient.B / 255f; }
-            _gl.Uniform3(_gl.GetUniformLocation(_program, "uAmbientLight"),r,g,b);
-        }
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uLighting"), _lighting ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uLocalViewer"), _localViewer ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uNormalizeNormals"), _normalizeNormals ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uColorVertex"), _colorVertex ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uSpecularEnabled"), _specularEnabled ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uDiffuseSource"), _diffuseSource);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uAmbientSource"), _ambientSource);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uEmissiveSource"), _emissiveSource);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uSpecularSource"), _specularSource);
-        _gl.Uniform4(_gl.GetUniformLocation(_program, "uMaterialAmbient"),_material.Ambient.Red,_material.Ambient.Green,_material.Ambient.Blue,_material.Ambient.Alpha);
-        _gl.Uniform4(_gl.GetUniformLocation(_program, "uMaterialEmissive"),_material.Emissive.Red,_material.Emissive.Green,_material.Emissive.Blue,_material.Emissive.Alpha);
-        _gl.Uniform3(_gl.GetUniformLocation(_program, "uSpecular"), _material.Specular.Red, _material.Specular.Green, _material.Specular.Blue);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uPower"), _specularEnabled ? _material.Power : 0f);
-        int lightIndex = 0;
-        foreach (int index in _enabledLights)
-        {
-            if (lightIndex == 8) break;
-            if (!_lights.TryGetValue(index, out var light) || light.Type != LightType.Directional) continue;
-            var direction = System.Numerics.Vector3.TransformNormal(light.Direction, View);
-            _gl.Uniform3(_gl.GetUniformLocation(_program, $"uLightDirection[{lightIndex}]"),direction.X,direction.Y,direction.Z);
-            _gl.Uniform3(_gl.GetUniformLocation(_program, $"uLightDiffuse[{lightIndex}]"),light.Diffuse.R / 255f,light.Diffuse.G / 255f,light.Diffuse.B / 255f);
-            _gl.Uniform3(_gl.GetUniformLocation(_program, $"uLightSpecular[{lightIndex}]"),light.Specular.R / 255f,light.Specular.G / 255f,light.Specular.B / 255f);
-            lightIndex++;
-        }
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uLightCount"), lightIndex);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uFogMode"), _fogEnabled ? (int)_fogMode : 0);
-        _gl.Uniform3(_gl.GetUniformLocation(_program, "uFogColour"), _fogColour.R / 255f, _fogColour.G / 255f, _fogColour.B / 255f);
-        _gl.Uniform3(_gl.GetUniformLocation(_program, "uFogParams"), _fogStart, _fogEnd, _fogDensity);
-        _gl.Uniform4(_colourLocation, diffuse.Red, diffuse.Green, diffuse.Blue, diffuse.Alpha);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _texture0?.Handle ?? 0);
-        _gl.Uniform1(_textureLocation, 0);
+                // D3D9 samples an unset texture stage as opaque white, not as black.
+        var stageTexture = _texture0?.RenderTexture ?? _device.WhiteFallbackTexture;
+        _device.RenderBackend.BindTexture(stageTexture);
+        _shader.SetUniform(_textureLocation, 0);
         _device.ApplySamplerState();
         int width = _device.RenderTarget?.Width ?? Math.Max(1, _device.FramebufferWidth);
         int height = _device.RenderTarget?.Height ?? Math.Max(1, _device.FramebufferHeight);
         var viewport = _device.Viewport;
         int logicalWidth = _device.RenderTarget?.Width ?? _device.GameWidth;
         int logicalHeight = _device.RenderTarget?.Height ?? _device.GameHeight;
-        float scale = _device.RenderTarget != null ? 1f : Math.Min((float)width / logicalWidth, (float)height / logicalHeight);
-        int left = (int)((width - logicalWidth * scale) / 2 + viewport.X * scale);
-        int bottom = (int)((height - logicalHeight * scale) / 2 + (logicalHeight - viewport.Y - viewport.Height) * scale);
-        _gl.Viewport(left, bottom, (uint)(viewport.Width * scale), (uint)(viewport.Height * scale));
-        _gl.DepthRange(viewport.MinZ, viewport.MaxZ);
-        _gl.BindVertexArray(_vao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _stream.Handle);
+        var content = THSSS.Graphics.PresentationGeometry.Fit(width, height, logicalWidth, logicalHeight);
+        float scaleX = (float)content.Width / logicalWidth;
+        float scaleY = (float)content.Height / logicalHeight;
+        int left = content.X + (int)(viewport.X * scaleX);
+        int bottom = content.Y + (int)((logicalHeight - viewport.Y - viewport.Height) * scaleY);
+        _device.RenderBackend.SetViewport(left, bottom, (int)(viewport.Width * scaleX),
+            (int)(viewport.Height * scaleY), viewport.MinZ, viewport.MaxZ);
+        // The backend re-establishes attribute pointers for this buffer on every draw;
+        // a VAO would cache the previously bound buffer and break re-uploads.
         int stride = _stride > 0 ? _stride : _stream.Stride;
-        ConfigureAttributes(stride);
+        var layout = BuildLayout(stride);
+        _projBlock ??= _device.RenderBackend.CreateBuffer(THSSS.Graphics.BufferKind.Uniform, THSSS.Graphics.ModelUniformBlock.Size);
+        var projBytes = new byte[THSSS.Graphics.ModelUniformBlock.Size];
+        void F(int o, float v) => BitConverter.TryWriteBytes(projBytes.AsSpan(o, 4), v);
+        void I(int o, int v) => BitConverter.TryWriteBytes(projBytes.AsSpan(o, 4), v);
+        void M(int o, float[] v) { for (int i = 0; i < 16; i++) F(o + i * 4, v[i]); }
+        M(0, WorldViewProjection.ColumnMajor(Projection));
+        var dc = _material.Diffuse;
+        F(64, dc.Red); F(68, dc.Green); F(72, dc.Blue); F(76, dc.Alpha);
+        I(80, _fogEnabled ? (int)_fogMode : 0);
+        M(96, WorldViewProjection.ColumnMajor(World));
+        M(160, WorldViewProjection.ColumnMajor(View));
+        I(224, _lighting ? 1 : 0);
+        I(228, AttributePresence.HasColour ? 1 : 0);
+        I(232, AttributePresence.PackedColour ? 1 : 0);
+        I(236, AttributePresence.HasNormal ? 1 : 0);
+        I(240, AttributePresence.HasSecondary ? 1 : 0);
+        I(244, AttributePresence.PackedSecondary ? 1 : 0);
+        I(248, _colorVertex ? 1 : 0);
+        I(252, _normalizeNormals ? 1 : 0);
+        I(256, _specularEnabled ? 1 : 0);
+        I(260, _diffuseSource); I(264, _ambientSource); I(268, _emissiveSource); I(272, _specularSource);
+        I(276, _localViewer ? 1 : 0);
+        int lightCount = 0;
+        float ar = _ambient.R / 255f, ag = _ambient.G / 255f, ab = _ambient.B / 255f;
+        foreach (int index in _enabledLights)
+        {
+            if (!_lights.TryGetValue(index, out var light)) continue;
+            if (_lighting) { ar += light.Ambient.R / 255f; ag += light.Ambient.G / 255f; ab += light.Ambient.B / 255f; }
+            if (light.Type != LightType.Directional || lightCount == THSSS.Graphics.ModelUniformBlock.MaxLights) continue;
+            var d = System.Numerics.Vector3.TransformNormal(light.Direction, View);
+            F(THSSS.Graphics.ModelUniformBlock.LightDirection + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, d.X); F(THSSS.Graphics.ModelUniformBlock.LightDirection + 4 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, d.Y); F(THSSS.Graphics.ModelUniformBlock.LightDirection + 8 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, d.Z);
+            F(THSSS.Graphics.ModelUniformBlock.LightDiffuse + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Diffuse.R / 255f); F(THSSS.Graphics.ModelUniformBlock.LightDiffuse + 4 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Diffuse.G / 255f); F(THSSS.Graphics.ModelUniformBlock.LightDiffuse + 8 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Diffuse.B / 255f);
+            F(THSSS.Graphics.ModelUniformBlock.LightSpecular + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Specular.R / 255f); F(THSSS.Graphics.ModelUniformBlock.LightSpecular + 4 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Specular.G / 255f); F(THSSS.Graphics.ModelUniformBlock.LightSpecular + 8 + lightCount * THSSS.Graphics.ModelUniformBlock.LightStride, light.Specular.B / 255f);
+            lightCount++;
+        }
+        I(280, lightCount);
+        F(288, ar); F(292, ag); F(296, ab);
+        F(304, _material.Specular.Red); F(308, _material.Specular.Green); F(312, _material.Specular.Blue);
+        F(316, _specularEnabled ? _material.Power : 0f);
+        F(320, _fogColour.R / 255f); F(324, _fogColour.G / 255f); F(328, _fogColour.B / 255f);
+        F(336, _fogStart); F(340, _fogEnd); F(344, _fogDensity);
+        F(352, _material.Ambient.Red); F(356, _material.Ambient.Green); F(360, _material.Ambient.Blue); F(364, _material.Ambient.Alpha);
+        F(368, _material.Emissive.Red); F(372, _material.Emissive.Green); F(376, _material.Emissive.Blue); F(380, _material.Emissive.Alpha);
+        _device.RenderBackend.SetUniformBlock(0, _projBlock, projBytes);
         bool probe = Environment.GetEnvironmentVariable("THSSS_DIAG3D") == "1"
             && ++_diagnosticDraw >= 100 && _diagnosticDraw <= 1000 && _diagnosticDraw % 20 == 0;
         byte[] before = probe ? ReadTarget(width, height) : null;
-        _gl.DrawArrays(glType, startVertex, (uint)vertexCount);
+        _device.RenderBackend.Draw(_shader, _stream.Buffer, layout,
+            (int)glType == (int)PrimitiveType.TriangleStrip ? PrimitiveKind.TriangleStrip : PrimitiveKind.TriangleList,
+            startVertex, vertexCount);
         if (probe)
         {
             var after = ReadTarget(width, height);
@@ -312,12 +292,15 @@ void main() {
                 if (after[i] != before[i] || after[i+1] != before[i+1] || after[i+2] != before[i+2]) changed++;
             Console.WriteLine($"[3D-PIXELS] draw={_diagnosticDraw} changedRGB={changed} texture={_texture0?.Handle} materialAlpha={diffuse.Alpha} error={_gl.GetError()}");
         }
-        _gl.BindVertexArray(0);
-        _gl.BindSampler(0,0);
-        _gl.UseProgram(0);
+
     }
 
-    private unsafe void ConfigureAttributes(int stride)
+    /// <summary>
+    /// Describes the stream layout the backend must bind for this draw. Attributes are
+    /// only listed when the vertex actually carries them; absent ones fall back to the
+    /// default value the shader expects.
+    /// </summary>
+    private VertexLayout BuildLayout(int stride)
     {
         int position = 0, normal = -1, uv = -1, colour = -1, secondary = -1;
         bool packed = true, secondaryPacked = true;
@@ -347,27 +330,32 @@ void main() {
             if ((format & VertexFormat.Specular) != 0) { secondary = offset; offset += 4; }
             if (offset + 8 <= stride) uv = offset;
         }
-        _gl.VertexAttribPointer(0,3,VertexAttribPointerType.Float,false,(uint)stride,(void*)(_offset+position));
-        _gl.EnableVertexAttribArray(0);
-        SetAttribute(1,2,uv,VertexAttribPointerType.Float,false,stride);
-        SetAttribute(2,3,normal,VertexAttribPointerType.Float,false,stride);
-        SetAttribute(3,4,colour,packed ? VertexAttribPointerType.UnsignedByte : VertexAttribPointerType.Float,packed,stride);
-        SetAttribute(4,4,secondary,secondaryPacked ? VertexAttribPointerType.UnsignedByte : VertexAttribPointerType.Float,secondaryPacked,stride);
-        if (secondary < 0) _gl.VertexAttrib4(4,0f,0f,0f,0f);
-        if (normal < 0) _gl.VertexAttrib3(2,0f,0f,0f);
-        if (colour < 0) _gl.VertexAttrib4(3,1f,1f,1f,1f);
-        _gl.Uniform1(_gl.GetUniformLocation(_program,"uHasNormal"),normal>=0 ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program,"uHasColour"),colour>=0 ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program,"uPackedColour"),packed ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program,"uHasSecondary"),secondary>=0 ? 1 : 0);
-        _gl.Uniform1(_gl.GetUniformLocation(_program,"uPackedSecondary"),secondaryPacked ? 1 : 0);
+
+        var attributes = new List<VertexAttribute>(5)
+        {
+            new(0, 3, VertexAttributeType.Float, false, _offset + position),
+        };
+        if (uv >= 0) attributes.Add(new(1, 2, VertexAttributeType.Float, false, _offset + uv));
+        if (normal >= 0) attributes.Add(new(2, 3, VertexAttributeType.Float, false, _offset + normal));
+        if (colour >= 0)
+            attributes.Add(new(3, 4, packed ? VertexAttributeType.UnsignedByte : VertexAttributeType.Float,
+                packed, _offset + colour));
+        if (secondary >= 0)
+            attributes.Add(new(4, 4, secondaryPacked ? VertexAttributeType.UnsignedByte : VertexAttributeType.Float,
+                secondaryPacked, _offset + secondary));
+
+        SetUniform1("uHasNormal", normal >= 0 ? 1 : 0);
+        SetUniform1("uHasColour", colour >= 0 ? 1 : 0);
+        SetUniform1("uPackedColour", packed ? 1 : 0);
+        SetUniform1("uHasSecondary", secondary >= 0 ? 1 : 0);
+        SetUniform1("uPackedSecondary", secondaryPacked ? 1 : 0);
+        AttributePresence = (colour >= 0, packed, normal >= 0, secondary >= 0, secondaryPacked);
+        return new VertexLayout(stride, attributes.ToArray());
     }
 
-    private unsafe void SetAttribute(uint location,int size,int offset,VertexAttribPointerType type,bool normalized,int stride)
+    private void SetUniform1(string name, int value)
     {
-        if (offset < 0) { _gl.DisableVertexAttribArray(location); return; }
-        _gl.VertexAttribPointer(location,size,type,normalized,(uint)stride,(void*)(_offset+offset));
-        _gl.EnableVertexAttribArray(location);
+        _shader.SetUniform(_shader.GetUniformLocation(name), value);
     }
 
     private unsafe byte[] ReadTarget(int width, int height)
@@ -386,8 +374,7 @@ void main() {
 
     public void Dispose()
     {
-        if (_program != 0) _gl.DeleteProgram(_program);
-        if (_vao != 0) _gl.DeleteVertexArray(_vao);
-        _program = _vao = 0;
+        _projBlock?.Dispose();
+        _shader?.Dispose();
     }
 }

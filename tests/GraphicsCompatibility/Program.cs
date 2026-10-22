@@ -21,7 +21,7 @@ image[1, 1] = new Rgba32(255, 255, 255, 255);
 using var texture = Texture.FromImage(device, image);
 // GetTexImage writes the ENTIRE texture: allocate all 2*2*4 bytes, not one pixel.
 var bytes = new byte[16];
-gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
+gl.BindTexture(TextureTarget.Texture2D, texture.GLName);
 unsafe { fixed (byte* p = bytes) gl.GetTexImage(TextureTarget.Texture2D, 0, Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, p); }
 if (bytes[0] != 255 || bytes[1] != 0 || bytes[2] != 0)
     throw new Exception($"Texture row zero must retain source top-left red; got {bytes[0]},{bytes[1]},{bytes[2]}");
@@ -68,7 +68,7 @@ locked.Data.WriteRange(bitmapData.Scan0, 128 * 64 * 4);
 bitmap.UnlockBits(bitmapData);
 textTexture.UnlockRectangle(0);
 var textPixels = new byte[128 * 64 * 4];
-gl.BindTexture(TextureTarget.Texture2D, textTexture.Handle);
+gl.BindTexture(TextureTarget.Texture2D, textTexture.GLName);
 unsafe { fixed (byte* p = textPixels) gl.GetTexImage(TextureTarget.Texture2D, 0, Silk.NET.OpenGL.PixelFormat.Rgba, PixelType.UnsignedByte, p); }
 int opaqueText = 0;
 for (int i = 3; i < textPixels.Length; i += 4)

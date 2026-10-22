@@ -96,7 +96,7 @@ internal static class GpuChecks
                 1,-1,0,hi,lo,0.1f,0.2f,0.3f,0.4f, 1,1,0,hi,hi,0.1f,0.2f,0.3f,0.4f, -1,1,0,lo,hi,0.1f,0.2f,0.3f,0.4f };
             gl.BindVertexArray(vao); gl.BindBuffer(BufferTargetARB.ArrayBuffer, vbo);
             gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length*sizeof(float)), (ReadOnlySpan<float>)vertices, BufferUsageARB.DynamicDraw);
-            gl.ActiveTexture(TextureUnit.Texture0); gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
+            gl.ActiveTexture(TextureUnit.Texture0); gl.BindTexture(TextureTarget.Texture2D, texture.GLName);
             effect.Begin(); effect.BeginPass(0);
             typeof(Effect).GetMethod("Bind", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(effect, new object[] { Matrix.Identity, Matrix.Identity });
             gl.DrawArrays(Silk.NET.OpenGL.PrimitiveType.Triangles, 0, 6);

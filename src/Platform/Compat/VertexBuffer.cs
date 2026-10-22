@@ -1,44 +1,43 @@
-// Cross-platform VertexBuffer and VertexDeclaration
+// Cross-platform VertexBuffer and VertexDeclaration, backed by IRenderBuffer.
 using System;
 using System.Runtime.InteropServices;
-using Silk.NET.OpenGL;
+using THSSS.Graphics;
 
 namespace SlimDX.Direct3D9;
 
 /// <summary>Cross-platform vertex buffer</summary>
 public unsafe class VertexBuffer : IDisposable
 {
-    private GL _gl;
-    private uint _handle;
+    private readonly IRenderBackend _backend;
+    private IRenderBuffer _buffer;
     private int _sizeInBytes;
     private int _stride;
     private bool _disposed;
+    private readonly VertexElement[] _elements;
 
-    public uint Handle => _handle;
+    public IRenderHandle Handle => _buffer?.Handle;
+    internal IRenderBuffer Buffer => _buffer;
     public bool Disposed => _disposed;
     public int SizeInBytes => _sizeInBytes;
     public int Stride => _stride;
+    internal ReadOnlySpan<VertexElement> Elements => _elements;
 
     public VertexBuffer(Device device, int sizeInBytes, Usage usage, VertexFormat format, Pool pool)
     {
-        _gl = device.GL;
+        _backend = device.RenderBackend;
         _sizeInBytes = sizeInBytes;
         _stride = GetStride(format);
-
-        _handle = _gl.GenBuffer();
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
-        _gl.BufferData(BufferTargetARB.ArrayBuffer, (uint)sizeInBytes, (void*)0, BufferUsageARB.DynamicDraw);
+        _buffer = _backend.CreateBuffer(BufferKind.Vertex, sizeInBytes);
+        _elements = BuildElements(format);
     }
 
     public VertexBuffer(Device device, int sizeInBytes, Usage usage, VertexDeclaration declaration, Pool pool)
     {
-        _gl = device.GL;
+        _backend = device.RenderBackend;
         _sizeInBytes = sizeInBytes;
         _stride = declaration?.Stride ?? 32;
-
-        _handle = _gl.GenBuffer();
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
-        _gl.BufferData(BufferTargetARB.ArrayBuffer, (uint)sizeInBytes, (void*)0, BufferUsageARB.DynamicDraw);
+        _buffer = _backend.CreateBuffer(BufferKind.Vertex, sizeInBytes);
+        _elements = declaration?.Elements.ToArray() ?? Array.Empty<VertexElement>();
     }
 
     /// <summary>
@@ -52,20 +51,49 @@ public unsafe class VertexBuffer : IDisposable
 
         int stride = 0;
         if ((format & VertexFormat.Position) != 0 || (format & VertexFormat.Xyz) != 0)
-            stride += 12; // 3 floats
-        if ((format & VertexFormat.Normal) != 0)
             stride += 12;
-        if ((format & VertexFormat.Diffuse) != 0)
-            stride += 4; // 1 uint (D3DCOLOR)
-        if ((format & VertexFormat.Specular) != 0)
-            stride += 4;
-        if ((format & VertexFormat.Texture1) != 0)
-            stride += 8; // 2 floats
-        return stride > 0 ? stride : 20;
+        if ((format & VertexFormat.Normal) != 0) stride += 12;
+        if ((format & VertexFormat.Diffuse) != 0) stride += 4;
+        if ((format & VertexFormat.Specular) != 0) stride += 4;
+        if ((format & VertexFormat.Texture1) != 0) stride += 8;
+        return stride == 0 ? 20 : stride;
     }
 
-    private DataStream _pending;
-    private int _pendingOffset;
+    private static VertexElement[] BuildElements(VertexFormat format)
+    {
+        if (format == VertexFormat.None)
+        {
+            return new[]
+            {
+                new VertexElement(0, 0, DeclarationType.Float3, DeclarationMethod.Default, DeclarationUsage.Position, 0),
+                new VertexElement(0, 12, DeclarationType.Float2, DeclarationMethod.Default, DeclarationUsage.TexCoord, 0),
+            };
+        }
+        var elements = new System.Collections.Generic.List<VertexElement>();
+        short offset = 0;
+        if ((format & VertexFormat.Position) != 0 || (format & VertexFormat.Xyz) != 0)
+        {
+            elements.Add(new VertexElement(0, offset, DeclarationType.Float3, DeclarationMethod.Default, DeclarationUsage.Position, 0));
+            offset += 12;
+        }
+        if ((format & VertexFormat.Normal) != 0)
+        {
+            elements.Add(new VertexElement(0, offset, DeclarationType.Float3, DeclarationMethod.Default, DeclarationUsage.Normal, 0));
+            offset += 12;
+        }
+        if ((format & VertexFormat.Diffuse) != 0)
+        {
+            elements.Add(new VertexElement(0, offset, DeclarationType.Color, DeclarationMethod.Default, DeclarationUsage.Color, 0));
+            offset += 4;
+        }
+        if ((format & VertexFormat.Specular) != 0) offset += 4;
+        if ((format & VertexFormat.Texture1) != 0)
+            elements.Add(new VertexElement(0, offset, DeclarationType.Float2, DeclarationMethod.Default, DeclarationUsage.TexCoord, 0));
+        return elements.ToArray();
+    }
+
+    private DataStream _pendingData;
+    private int _pendingDataOffset;
 
     /// <summary>
     /// Direct3D style lock: the caller writes vertices/indices into the returned
@@ -75,62 +103,51 @@ public unsafe class VertexBuffer : IDisposable
     public DataStream Lock(int offsetToLock, int sizeToLock, LockFlags flags)
     {
         int size = sizeToLock > 0 ? sizeToLock : _sizeInBytes - offsetToLock;
-        _pending = new DataStream(Math.Max(0, size), true, true);
-        _pendingOffset = offsetToLock;
-        return _pending;
+        _pendingData = new DataStream(Math.Max(0, size), true, true);
+        _pendingDataOffset = offsetToLock;
+        return _pendingData;
     }
 
     public DataStream Lock(LockFlags flags) => Lock(0, 0, flags);
 
     public void Unlock()
     {
-        if (_pending == null) return;
-        var bytes = _pending.ToArray();
-        if (bytes.Length > 0)
-        {
-            _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
-            unsafe
-            {
-                fixed (byte* ptr = bytes)
-                {
-                    _gl.BufferSubData(BufferTargetARB.ArrayBuffer, _pendingOffset,
-                        (uint)bytes.Length, ptr);
-                }
-            }
-        }
-        _pending = null;
+        if (_pendingData == null) return;
+        var bytes = _pendingData.ToArray();
+        if (bytes.Length > 0) _buffer.Update(bytes, _pendingDataOffset);
+        _pendingData = null;
     }
 
-    public void Bind()
-    {
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
-    }
+    public void Bind() { }
 
     public void SetData<T>(T[] data) where T : unmanaged
     {
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _handle);
         int byteCount = data.Length * Marshal.SizeOf<T>();
-        _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0, (uint)byteCount, (ReadOnlySpan<T>)data);
+        var bytes = new byte[byteCount];
+        System.Buffer.BlockCopy(data, 0, bytes, 0, byteCount);
+        _buffer.Update(bytes, 0);
+    }
+
+    public void WriteRange<T>(T[] data) where T : unmanaged
+    {
+        int size = Marshal.SizeOf<T>();
+        var bytes = new byte[size * data.Length];
+        System.Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+        _buffer.Update(bytes, 0);
     }
 
     public void Dispose()
     {
-        if (!_disposed)
-        {
-            if (_handle != 0)
-            {
-                _gl.DeleteBuffer(_handle);
-                _handle = 0;
-            }
-            _disposed = true;
-        }
+        if (_disposed) return;
+        _buffer?.Dispose();
+        _buffer = null;
+        _disposed = true;
     }
 }
 
-/// <summary>Cross-platform vertex declaration</summary>
+/// <summary>Cross-platform vertex declaration (GL layout description).</summary>
 public unsafe class VertexDeclaration : IDisposable
 {
-    private GL _gl;
     private VertexElement[] _elements;
     private bool _disposed;
 
@@ -140,10 +157,7 @@ public unsafe class VertexDeclaration : IDisposable
 
     public VertexDeclaration(Device device, VertexElement[] elements)
     {
-        _gl = device.GL;
         _elements = elements;
-
-        // Calculate stride
         foreach (var elem in elements)
         {
             int offset = elem.Offset + GetElementSize(elem.Type);
@@ -166,66 +180,10 @@ public unsafe class VertexDeclaration : IDisposable
         _ => 4,
     };
 
-    public void Apply()
-    {
-        uint index = 0;
-        foreach (var elem in _elements)
-        {
-            if (elem.Usage == DeclarationUsage.Position || elem.Usage == DeclarationUsage.PositionT)
-            {
-                _gl.VertexAttribPointer(index, GetElementComponents(elem.Type), GetElementType(elem.Type), false, (uint)Stride, (void*)elem.Offset);
-                _gl.EnableVertexAttribArray(index);
-                index++;
-            }
-            else if (elem.Usage == DeclarationUsage.TextureCoordinate)
-            {
-                _gl.VertexAttribPointer(index, GetElementComponents(elem.Type), GetElementType(elem.Type), false, (uint)Stride, (void*)elem.Offset);
-                _gl.EnableVertexAttribArray(index);
-                index++;
-            }
-            else if (elem.Usage == DeclarationUsage.Color)
-            {
-                _gl.VertexAttribPointer(index, 4, VertexAttribPointerType.UnsignedByte, true, (uint)Stride, (void*)elem.Offset);
-                _gl.EnableVertexAttribArray(index);
-                index++;
-            }
-        }
-    }
+    /// <summary>Attributes are bound by the backend at draw time; nothing to do here.</summary>
+    public void Apply() { }
 
-    private int GetElementComponents(DeclarationType type) => type switch
-    {
-        DeclarationType.Float1 => 1,
-        DeclarationType.Float2 => 2,
-        DeclarationType.Float16_2 => 2,
-        DeclarationType.Float3 => 3,
-        DeclarationType.Float4 => 4,
-        DeclarationType.Float16_4 => 4,
-        DeclarationType.Color => 4,
-        DeclarationType.UByte4 => 4,
-        DeclarationType.Short2 => 2,
-        DeclarationType.Short4 => 4,
-        _ => 1,
-    };
-
-    private VertexAttribPointerType GetElementType(DeclarationType type) => type switch
-    {
-        DeclarationType.Float1 => VertexAttribPointerType.Float,
-        DeclarationType.Float2 => VertexAttribPointerType.Float,
-        DeclarationType.Float3 => VertexAttribPointerType.Float,
-        DeclarationType.Float4 => VertexAttribPointerType.Float,
-        DeclarationType.Color => VertexAttribPointerType.UnsignedByte,
-        DeclarationType.UByte4 => VertexAttribPointerType.UnsignedByte,
-        DeclarationType.Short2 => VertexAttribPointerType.Short,
-        DeclarationType.Short4 => VertexAttribPointerType.Short,
-        DeclarationType.Float16_2 => VertexAttribPointerType.HalfFloat,
-        DeclarationType.Float16_4 => VertexAttribPointerType.HalfFloat,
-        _ => VertexAttribPointerType.Float,
-    };
-
-    public void Dispose()
-    {
-        _disposed = true;
-    }
+    public void Dispose() => _disposed = true;
 }
 
-// VertexElement and DeclarationMethod are in Direct3D9AdditionalTypes.cs
+// VertexElement and DeclarationMethod live in Direct3D9AdditionalTypes.cs
