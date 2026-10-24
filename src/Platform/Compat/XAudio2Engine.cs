@@ -1,8 +1,8 @@
-// XAudio2 compatibility layer backed by OpenAL (Silk.NET.OpenAL).
+// XAudio2 compatibility API with shared playback semantics and selectable native transports.
 using System;
 using System.Collections.Generic;
-using Silk.NET.OpenAL;
 using SlimDX.Multimedia;
+using THSSS.Audio;
 
 namespace SlimDX.XAudio2
 {
@@ -30,8 +30,8 @@ namespace SlimDX.XAudio2
         private readonly AudioEngine _engine = AudioEngine.Instance;
         private readonly WaveFormat _format;
         private readonly Queue<AudioPlayback> _playbacks = new();
-        private readonly Queue<(uint Buffer, AudioPlayback Playback, int Frames)> _queued = new();
-        private uint _source;
+        private readonly Queue<(AudioPlayback Playback, int Frames)> _queued = new();
+        private readonly IAudioSource _output;
         private float[] _matrix;
         private float _volume = 1f;
         private long _samplesPlayed;
@@ -54,12 +54,7 @@ namespace SlimDX.XAudio2
             _matrix = format.Channels == 1 ? new[] { 1f, 1f } : new[] { 1f, 0f, 0f, 1f };
             lock (_engine.Sync)
             {
-                if (_engine.AL == null) return;
-                if (!_engine.AL.IsExtensionPresent("AL_EXT_FLOAT32"))
-                    throw new NotSupportedException("OpenAL AL_EXT_FLOAT32 is required for independent matrix mixing and gain.");
-                _source = _engine.AL.GenSource();
-                _engine.AL.SetSourceProperty(_source, SourceFloat.MaxGain, 16777216f);
-                CheckError();
+                _output = _engine.Backend.CreateSource(_format.SamplesPerSecond);
             }
         }
 
@@ -112,7 +107,7 @@ namespace SlimDX.XAudio2
             lock (_engine.Sync)
             {
                 EnsureUsable();
-                if (_source != 0) _engine.AL.SourcePause(_source);
+                _output.Pause();
                 _running = false;
                 Pump();
                 _engine.Unregister(this);
@@ -131,8 +126,7 @@ namespace SlimDX.XAudio2
                 {
                     EnsureUsable();
                     _volume = gain;
-                    if (_source != 0) _engine.AL.SetSourceProperty(_source, SourceFloat.Gain, gain);
-                    CheckError();
+                    _output.SetGain(gain);
                 }
             }
         }
@@ -177,7 +171,7 @@ namespace SlimDX.XAudio2
                 EnsureUsable();
                 bool running = _running;
                 _running = false;
-                if (_source != 0) _engine.AL.SourcePause(_source);
+                _output.Pause();
                 Pump();
                 ConsumeOffset();
                 ClearNativeQueue();
@@ -209,20 +203,17 @@ namespace SlimDX.XAudio2
                 _failure = error;
                 _running = false;
                 _engine.Unregister(this);
-                if (_source != 0) _engine.AL.SourcePause(_source);
+                try { _output.Pause(); } catch { /* Keep the original failure; never escape the timer. */ }
             }
         }
 
         private void Pump()
         {
-            if (_source == 0) return;
-            var al = _engine.AL;
-            al.GetSourceProperty(_source, GetSourceInteger.BuffersProcessed, out int processed);
+            int processed = _output.ProcessedBuffers;
             while (processed-- > 0)
             {
                 var chunk = _queued.Dequeue();
-                al.SourceUnqueueBuffers(_source, new[] { chunk.Buffer });
-                al.DeleteBuffer(chunk.Buffer);
+                _output.UnqueueProcessed();
                 chunk.Playback.Consumed += chunk.Frames;
                 _samplesPlayed += chunk.Frames;
                 if (chunk.Playback.Consumed == chunk.Playback.Length && chunk.Playback.EndOfStream) _samplesPlayed = 0;
@@ -236,8 +227,7 @@ namespace SlimDX.XAudio2
             FillQueue();
             if (_running && _queued.Count > 0)
             {
-                al.GetSourceProperty(_source, GetSourceInteger.SourceState, out int state);
-                if (state != 0x1012) al.SourcePlay(_source);
+                if (!_output.IsPlaying) _output.Play();
                 if (_playbacks.Count > 0 && !_playbacks.Peek().Started)
                 {
                     _playbacks.Peek().Started = true;
@@ -245,7 +235,6 @@ namespace SlimDX.XAudio2
                 }
             }
             if (_playbacks.Count == 0) _engine.Unregister(this);
-            CheckError();
         }
 
         private void FillQueue()
@@ -254,13 +243,10 @@ namespace SlimDX.XAudio2
             {
                 while (_queued.Count < 4 && playback.Uploaded < playback.Length)
                 {
-                    if (_queued.Count == 0) _engine.AL.SourceRewind(_source);
                     int frames = (int)Math.Min(Math.Max(256, _format.SamplesPerSecond / 10), playback.Length - playback.Uploaded);
                     var samples = playback.Render(playback.Uploaded, frames, _matrix);
-                    uint buffer = _engine.AL.GenBuffer();
-                    _engine.AL.BufferData(buffer, (BufferFormat)0x10011, samples, _format.SamplesPerSecond);
-                    _engine.AL.SourceQueueBuffers(_source, new[] { buffer });
-                    _queued.Enqueue((buffer, playback, frames));
+                    _output.Submit(samples, _format.SamplesPerSecond);
+                    _queued.Enqueue((playback, frames));
                     playback.Uploaded += frames;
                     AudioEngine.BuffersUploaded++;
                 }
@@ -270,31 +256,19 @@ namespace SlimDX.XAudio2
 
         private int Offset()
         {
-            if (_source == 0 || _queued.Count == 0) return 0;
-            _engine.AL.GetSourceProperty(_source, GetSourceInteger.SampleOffset, out int offset);
-            return Math.Max(0, offset);
+            return _queued.Count == 0 ? 0 : _output.SampleOffset;
         }
 
         private void ClearNativeQueue()
         {
-            if (_source == 0) return;
-            _engine.AL.SourceStop(_source);
-            _engine.AL.SetSourceProperty(_source, SourceInteger.Buffer, 0);
-            _engine.AL.SourceRewind(_source);
-            while (_queued.Count > 0) _engine.AL.DeleteBuffer(_queued.Dequeue().Buffer);
-        }
-
-        private void CheckError()
-        {
-            if (_source == 0) return;
-            var error = _engine.AL.GetError();
-            if (error != AudioError.NoError) throw new InvalidOperationException($"OpenAL audio operation failed: {error}.");
+            _output.Clear();
+            _queued.Clear();
         }
 
         private void EnsureUsable()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_failure != null) throw new InvalidOperationException("OpenAL playback pump failed.", _failure);
+            if (_failure != null) throw new InvalidOperationException(_engine.Backend.Name + " playback pump failed.", _failure);
         }
 
         public void DestroyVoice() => Dispose();
@@ -304,11 +278,9 @@ namespace SlimDX.XAudio2
             {
                 if (_disposed) return;
                 _engine.Unregister(this);
-                ClearNativeQueue();
-                if (_source != 0) _engine.AL.DeleteSource(_source);
-                _source = 0;
-                _playbacks.Clear();
                 _disposed = true;
+                try { _output.Dispose(); }
+                finally { _queued.Clear(); _playbacks.Clear(); }
             }
         }
 

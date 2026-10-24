@@ -51,7 +51,11 @@ internal static class Program
     }
 
     private static WaveStream Wave(int frames, int channels = 1) => new(new MemoryStream(Wav(frames, channels)));
-    private static uint Source(SourceVoice voice) => (uint)typeof(SourceVoice).GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(voice)!;
+    private static uint Source(SourceVoice voice)
+    {
+        var output = typeof(SourceVoice).GetField("_output", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(voice)!;
+        return (uint)output.GetType().GetField("Id",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(output)!;
+    }
 
     private static object Playback(AudioBuffer buffer, WaveFormat format) => Activator.CreateInstance(
         typeof(SourceVoice).Assembly.GetType("SlimDX.XAudio2.AudioPlayback", true)!,
