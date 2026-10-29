@@ -1,10 +1,10 @@
-# Shader 修复与验收（2026-10-20）
+# Shader 与光照（2026-10-25）
 
-对应修复前完整清单：`SHADER_AUDIT_2026.md`。本文件为当前状态，原报告保留为缺陷历史证据。
+本文件是 shader 的当前状态与验收记录。
 
-## 修复矩阵
+## 实现与验收
 
-| 原发现 | 当前实现 | 验证 |
+| 项 | 当前实现 | 验证 |
 |---|---|---|
 | Blur/Filter/Warp 不执行 | `Effect.cs`、`EffectSource.cs`、`EffectShaders.cs` 保存已声明参数、真实加载源、单technique/pass生命周期、GLSL编译/链接、Mirror/Linear sampler；Sprite实际调用pass程序 | EffectCompatibility：每个案例7680像素全RGBA对照原公式CPU参考；Filter、Blur多强度、Warp半径0/非零、ColorKey -1..6及靠边中心；浮点最大误差约0.000064 |
 | 渲染纹理上下方向与Boss中心坐标 | 分离 `uInputFlip`（Sprite坐标）和 `uSourceFlip`（实际纹理方向），在逻辑UV空间计算原FX公式，采样时转换回GL方向 | SpriteIntegrationChecks：真实上传→离屏→Sprite→FX→输出，非对称图像、顶部偏心Boss、六种ColorKey、显式RT源覆盖普通源；8bit误差小于0.002 |
@@ -58,11 +58,11 @@ dotnet run --project ../tests/MeshCompatibility/MeshCompatibility.csproj
 
 2026-10-20，Intel UHD / Mesa OpenGL 4.6 环境，七套测试按顺序 fail-fast 实际执行，退出码0：ShaderAudit（8条PASS输出，7个API断言）、ShaderGpuAudit（25条PASS）、GraphicsCompatibility（6组PASS）、MatrixConventions（1组）、MathCompatibility（1组）、EffectCompatibility（44条PASS，包括真实Sprite/RT方向）、MeshCompatibility（62条PASS输出，包括59基础断言和两个真实游戏模型封装）。输出：`/tmp/thsss-shader-final-regressions.log`。
 
-重复入口：从仓库根目录运行 `sh tools/run-shader-regressions.sh`。该入口不会把失败吞掉，也不会过滤错误。仓库历史已跟踪部分bin/obj生成物，`git diff --check`报告的尾随空白来自这些自动生成文件，不应为修复shader而编辑生成代码。
+运行入口：从仓库根目录执行 `sh tools/run-shader-regressions.sh`（DejaGnu 驱动，9 套）。失败即非零退出，不过滤错误。
 
-## 光照状态补充修复（2026-10-20）
+## 光照状态（2026-10-25）
 
-复查发现原实现始终归一化法线并忽略顶点材质来源。本轮修复已按 D3D9 文档核对，不通过改关卡灯光或模型缩放参数掩盖问题：
+法线归一化与顶点材质来源按 D3D9 文档核对实现，不通过改关卡灯光或模型缩放参数掩盖偏差：
 
 - `NormalizeNormals` 默认false；先做world/view逆转置，再由开关决定是否归一化。零法线不执行normalize，避免NaN。基线复现：沿Z缩放2倍应输出红色128，旧版错误输出255；修复后开关切换为128→255→128。
 - `ColorVertex` 默认true；Diffuse/Specular/Ambient/Emissive分别从Material/Color1/Color2选择。默认Diffuse=Color1、Specular=Color2、Ambient/Emissive=Material。关闭ColorVertex时全部使用相应材质；缺少指定顶点颜色时同样回退相应材质，不拿另一组顶点颜色顶替。
@@ -70,9 +70,9 @@ dotnet run --project ../tests/MeshCompatibility/MeshCompatibility.csproj
 - 修正状态数字：SpecularEnable29、LocalViewer142、NormalizeNormals143、AmbientMaterialSource147、EmissiveMaterialSource148。旧AmbientMaterialSource=140会误写FogVertexMode，现已分离。
 - `tests/LightingCompatibility` 实际GPU通过110个像素断言，包括四光照分量×三来源×ColorVertex两状态×四种颜色存在组合，以及默认状态、packed/FVF、法线缩放、旋转相机和CPU逆转置参考。
 
-`sh tools/run-shader-regressions.sh` 现运行八套（新增LightingCompatibility），全量运行退出码0，日志 `/tmp/thsss-lighting-all-regressions.log`。上述旧“七套”记录保留为当时执行历史，不代表当前套数。
+`sh tools/run-shader-regressions.sh` 当前运行九套，全量退出码 0。
 
-文档依据（2026-10-20核验，API本身是历史D3D9规范，不伪造新版年份）：
+文档依据（D3D9 规范本身是历史 API，引用保持原年份）：
 - https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3drenderstatetype
 - https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dmaterialcolorsource
 - https://learn.microsoft.com/en-us/windows/win32/direct3d9/diffuse-lighting

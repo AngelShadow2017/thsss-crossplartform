@@ -1,14 +1,12 @@
-# 原作行为差异修复与验收（2026-10-20）
+# 原作行为一致性（2026-10-25）
 
-修复前证据保留于 [`BEHAVIOR_PARITY_AUDIT_2026.md`](BEHAVIOR_PARITY_AUDIT_2026.md)。本文件是当前实现与验收记录；旧诊断里的 `CONFIRMED` 表示当时复现缺陷，不能当作当前状态或验收通过。
+本文件是行为一致性的当前实现与验收记录。
 
-本轮没有改动关卡难度、子弹公式、碰撞半径或随机数算法，也没有覆盖用户原始 `Score.dat`、录像或配置。所有坏档、旧编码及完整游戏集成测试都使用临时独立目录。既有工作区改动不回滚、不顺手提交。
+关卡难度、子弹公式、碰撞半径与随机数算法与原版一致，未做改动。`Score.dat`、录像与配置的测试一律使用临时目录。
 
-## 逐项修复矩阵
+## 行为约定
 
-编号与原审计一致。
-
-| 项 | 当前修复 | 验收证据 |
+| 项 | 当前实现 | 验收证据 |
 |---|---|---|
 | 1 音频区间/循环 | `AudioPlayback.cs` 将PlayBegin/Length与LoopBegin/Length/Count映射为样本时间线；支持有限/无限循环，最多四个原生缓冲区、定时补充，不展开无穷PCM | 真实AL游标及OpenAL Soft loopback，非零起点、精确有限循环2200帧结束、无限循环有界队列 |
 | 2 暂停恢复 | SourceVoice.Stop暂停而非SourceStop重置；Start续播，Flush单独清空 | 暂停样本游标3292，恢复5409，不归零；循环段也覆盖 |
@@ -85,3 +83,13 @@ ALSOFT_DRIVERS=null xvfb-run -a sh tools/run-shader-regressions.sh
 3. 非有限或混合数字分隔的Replay明确拒绝；原写入不会生成分组符，单逗号包括三位小数按小数处理，不再错误拒绝。未支持开发专用Stage_test回放菜单。
 4. 无实体手柄、不同显示器刷新率/驱动VSync和实体扬声器听感测试；自动设备/节拍/样本断言不冒充人工验收。
 5. 仍有旧ini-parser的NU1701兼容警告与GTK主题警告；实际编译/测试成功。AFT C#语言服务初始化失败不能当作代码诊断通过。
+6. 机器上装有 Wine 与 Mono 不等于能运行原版 CLR2 + SlimDX，原 Windows 运行基线仍未建立。
+7. `Matrix.Invert` 仍返回 Identity；游戏活动中没有找到调用点，属于潜在兼容缺口，不是已知关卡故障。
+8. 坏档禁止自动覆盖、原子备份、截断录像明确拒绝，是与原版有意的差异，不为了字面一致撤销。
+
+## 字体与帧节奏
+
+- **字体单位**：`Font(name, size)`、`Font(name, size, style)` 显式设置 `Unit = GraphicsUnit.Point`，与 GDI+ 默认一致；带 `GraphicsUnit` 参数的构造器语义不变，DX Font 按像素高度的原生构造器仍传 Pixel。默认 16pt 等价 21.33px，`TextScreenshotCompatibility` 以严格相等断言覆盖，并与 16px 区分。主菜单、ED、关卡提示、StoryBox、DescriptionBox 都是原版使用 point 的位置，未逐个改字号。
+- **帧节奏**：`FinishFrameTiming` 由生产计时器提供时长、Sleep 与推帧，先按累计欠帧等待到 deadline，再做 16.62ms 采样循环，最后按 `DelayTolerance` 补偿。`verticalSync && (presentInterval == 1 || fullWindow)` 提前返回，与原版一致。`ConfigurePresentation(..., gameOwnsPacing: true)` 此时不再叠加 GLFW `FramesPerSecond`，其他场景保持原行为。
+  - 确定性验证：`FrameTiming.cs` 用生产函数对比原版公式，144 种场景 × 30 帧（FixedFPS 0/1、100/500ms 卡顿、PresentInterval 1–3、DelayTolerance 0/2/10、全屏/同步/启动画面组合）一致。
+  - 真实循环：隐藏 GLFW + 真实时钟，卡顿后 FixedFPS=0 恢复约 16.7ms/帧；FixedFPS=1 出现 5 个几乎立即的追帧，随后回到 16.49ms/帧。

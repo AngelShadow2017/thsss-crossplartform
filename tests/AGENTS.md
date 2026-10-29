@@ -1,51 +1,46 @@
-# Rendering compatibility tests (2026-10-20)
+# 测试目录（2026-10-26）
 
-## Resize/DPI acceptance (2026-10-24)
+从 `tests/` 运行。SDK 版本由根 `global.json` 固定；安装的 SDK 10 workload manifest 不完整，那是环境问题，不是代码问题。
 
-`sh tools/run-resize-regressions.sh` from root runs `WindowResizeCompatibility` on both GL/Vulkan with temporary player data. X11 headless: `ALSOFT_DRIVERS=null xvfb-run -a sh tools/run-resize-regressions.sh`; omit Xvfb for native Wayland desktop. Covers six sizes/non4:3 correction, minimum/restore/fullscreen, stable swapchain generation, non-symmetric corner pixels, fullscreen black borders and GL errors. DPI framebuffer-only updates are also in WindowInputCompatibility/PresentationGeometryChecks. See docs/WINDOW_SCALING_2026.md for compositor override and untested physical multi-monitor limits.
+## 布局
 
-Run all commands from `src/` so `global.json` selects SDK 8. The installed SDK 10 workload manifests are incomplete; do not confuse that environment failure with a code failure.
+```
+tests/
+├── <suite>/          C# 测试项目，`<suite>/<suite>.csproj`
+└── dejagnu/<tool>/   DejaGnu 驱动，每个 toolkit 单独 srcdir
+```
 
-## Acceptance suites
+项目引用为 `../../src/THSSS.csproj`。曾使用 `test/testcase/` 的旧布局已合并，不要再引用该路径。
 
-- `GraphicsCompatibility`: image/RT orientation, nested FBO restore, transformed Sprite, real textured Device3D pixels, dialogue upload, linear/Exp/Exp2 fog, ambient light and blend enable.
-- `MatrixConventions` and `MathCompatibility`: stage camera origin/target, nonzero terrain NDC, positive clip W, LH near/far depth, RH handedness, GL upload and 2D pivots.
-- `EffectCompatibility`: source/API validation, typed parameters and lifecycle; all RGBA pixels compared to original Blur/Filter/Warp CPU formulas; mirror edges, radius0, all colour keys and off-centre bosses; Sprite+RT source direction and explicit texture override; nonzero sampler restoration.
-- `MeshCompatibility`: text .x parser fixtures/concave triangulation/winding/normals/materials/Clone; actual Stair and 祭坛 geometry; GPU subsets/normal strides plus game Model_Mesh with shipped BMPs. It locates repository root itself.
-- `LightingCompatibility`: 110 GPU assertions for NormalizeNormals default/off/on, zero normals, nonuniform scale plus camera inverse-transpose, all four material-source terms with Material/Color1/Color2, ColorVertex switches and per-channel fallback, diffuse alpha, default sources, packed/float secondary colours and FVF/declaration layouts.
-- `ShaderAudit` and `ShaderGpuAudit`: former defect reproducers are now strict regression assertions. Failure throws/nonzero exit. Coverage includes absent-file/error/lifecycle handling, cross-Flush additive blend, D16 depth/ZWrite, viewport, reverse subtraction, packed vertex declarations and padding, FVF switches, samplers/mip completeness, directional/specular/local-viewer lighting and framebuffer binding restoration.
+DejaGnu 每个 toolkit 必须有独立源目录，因为 `runtest --srcdir` 会执行其中所有 `.exp`；共用目录会让一个 runner 跑到别的 toolkit 用例。
 
-`dotnet run --project ../tests/<suite>/<suite>.csproj` executes each suite. GPU suites need a working GLFW/OpenGL display. `EffectCompatibility --api-only` and `MeshCompatibility --cpu-only` explicitly skip GPU checks.
+| Toolkit | Runner | 用例 |
+|---|---|---|
+| `shader` | `tools/run-shader-regressions.sh` | 9 套渲染 |
+| `behavior` | `tools/run-behavior-regressions.sh` | 8 套行为，另加 GL/Vulkan 各一次窗口缩放 |
+| `audio` | `tools/run-audio-regressions.sh` | Linux OpenAL、错误选择、可选 Wine 原生 XAudio2 |
+| 缩放 | `tools/run-resize-regressions.sh` | GL/Vulkan 各 8 项 |
 
-## Compatibility invariants
+驱动只负责进程、超时和退出码；数值断言留在 C# 里。每个用例必须匹配自己的 PASS 标记，进程在打印前崩溃不能被当成通过。渲染套件依赖相对资源路径，需在 `src` 下运行；缩放和音频需要独立的临时数据根，不得写入 `game/`。
 
-- `Device.Material` must forward to Device3D; retaining an auto-property makes models invisible with zero shader material alpha.
-- D3D row-vector matrix fields upload in row element order with transpose=false, then GLSL uses projection*view*world*position. Depth maps by clip.z=2*clip.z-clip.w.
-- D3D Blend values include Zero=1, One=2, SourceAlpha=5, InverseSourceAlpha=6. FogEnable=28 and FogTableMode=35 are different states.
-- D3D lighting state IDs: SpecularEnable=29, LocalViewer=142, NormalizeNormals=143, DiffuseMaterialSource=145, SpecularMaterialSource=146, AmbientMaterialSource=147, EmissiveMaterialSource=148. NormalizeNormals defaults false; ColorVertex defaults true; default sources are Diffuse=Color1, Specular=Color2, Ambient/Emissive=Material. Missing requested vertex colour falls back to the corresponding material component, not to the other vertex colour.
-- FX uses logical top-left UV for its formulas and transforms to actual GL render-target sampling direction independently. Test with an asymmetric image and an off-centre Boss; centre-only images hide Y inversion bugs.
-- Sprite Flush must not reset caller blend factors mid-batch. End restores saved state unless DoNotSaveState.
-- A surface owns only its own GL objects; switching colour targets must attach the selected compatible depth renderbuffer and restore borrowed targets, not dispose them.
+## 关键套件
 
-Current repair matrix: `../docs/SHADER_FIXES_2026.md`. `../docs/SHADER_AUDIT_2026.md` is the pre-fix audit snapshot, not current pass/fail state.
+- `ListCompatibility`：pre-4.5 实时索引枚举（删除、同轮追加、真实事件/背景）以及工作线程停止超时。生产调用点用 `LegacyItems`，不是快照。
+- `SaveCompatibility`：只用临时存档与录像，校验 CP936/UTF-8 字节保留、坏档回滚、原子备份与 Replay 数字/EOF 契约。
+- `TextScreenshotCompatibility`：171 条断言，含 Point 单位、逻辑后台缓冲区缩放，以及 P 键截图在交换之后取帧。
+- `WindowInputCompatibility --glfw --game-smoke`：隐藏 GLFW 真实窗口、两种键盘模式、改键/F8/退出、焦点与手柄快照；Linux 下过滤鼠标/触控板误识别。实体手柄与可变刷新率仍需人工验证。
+- `VulkanBackend`：直接调用游戏实际 `Sprite`/`MySprite`、菜单图集与透明叠加，覆盖 400 次绘制一次提交、不同变换/颜色快照、跳过 Present 的 EndFrame、静态字形缓存失效。`THSSS_DIAG_FPS=1` 输出实际 FPS 与每帧提交/draw；性能测试不要同时开像素读回诊断。
+- `AudioBackendCompatibility`：后端中立契约，含精确循环、暂停游标、并发 voice、故障注入与幂等释放；另断言 XAudio2/Win32 类型只在 Windows 产物出现。
 
-Numeric test results do not establish every-stage screenshot parity across GPUs. The current model cannot view returned image attachments; never infer correct visuals from nonblack pixel counts alone.
+`BehaviorParityAudit` 是修复前的诊断快照，不属于验收套件，已排除在 runner 之外。
 
-## Behavior parity diagnostics (2026-10-20)
+## 验收
 
-`BehaviorParityAudit` is NOT an acceptance suite and is intentionally excluded from `run-shader-regressions.sh`. Run from `src` with `dotnet run --project ../tests/BehaviorParityAudit/BehaviorParityAudit.csproj -- --gpu`. It uses temporary isolated score/replay fixtures and silent WAVs; `CONFIRMED` means a current defect/difference was observed, not parity passed. See `../docs/BEHAVIOR_PARITY_AUDIT_2026.md` for original-source comparisons and the missing original Windows CLR2 runtime baseline.
+| 套件 | 断言 |
+|---|---|
+| `AudioCompatibility` | 162 条 OpenAL loopback |
+| `SaveCompatibility` | 84 条，含合法结局 `LastStage=All` 与三位逗号小数 |
+| `TextScreenshotCompatibility` | 171 条 |
+| `WindowInputCompatibility` | 4721 条，含两种键盘模式、144 种确定性计时场景与 Alt+F4 完整进程 |
 
-## Behavior repair acceptance (2026-10-20)
-
-- `ListCompatibility` is now a strict regression: pre-4.5 live indexed enumeration (including removals, same-pass appends, actual game events/backgrounds), plus explicit worker-stop timeout. Production former ForEach call sites use `LegacyItems`, not `Snapshot`.
-- `SaveCompatibility` uses only temporary score/replay files and asserts legacy CP936/UTF8 byte preservation, failed-load rollback/save blocking, atomic backups and replay number/EOF contracts.
-- `WindowInputCompatibility --glfw --game-smoke` includes real hidden GLFW and separate full-game processes for both keyboard modes, remapped controls/F8/Quit, focus and controller snapshots. It filters Linux mouse/touchpad capabilities from controller enumeration. Use Xvfb when there is no display; real physical gamepad and variable-refresh driver tests remain separate manual checks.
-- `sh tools/run-behavior-regressions.sh` from root is the acceptance runner for repaired behavior suites. Unlike the historical `BehaviorParityAudit`, its checks must throw/return nonzero on regressions.
-
-Final current behavior matrix: `../docs/BEHAVIOR_PARITY_FIXES_2026.md`. AudioCompatibility: 162 native/loopback assertions. SaveCompatibility: 84 assertions including valid ending LastStage=All and 3-digit legacy comma decimals. TextScreenshotCompatibility: 167 assertions plus logical backbuffer scaling and actual P-request-after-swap sequencing. WindowInputCompatibility: 109 assertions including two keyboard modes and a third complete Alt+F4 process. Historical BehaviorParityAudit is a repair-before snapshot, not a maintained acceptance tool; corrected Replay APIs may explicitly reject its formerly accepted malformed fixtures. Use the strict behavior runner, not the historic diagnostic, to verify fixes.
-
-- 2026-10-21 parity repairs: default System.Drawing.Font constructors now set Point (GDI+ default); FixedFPS deadline (`FinishFrameTiming`) owns live-window pacing with `gameOwnsPacing` disabling GLFW render cap. Tests: TextScreenshotCompatibility 171 incl unit/scale assertions; WindowInputCompatibility 4721 incl 144 deterministic timing scenarios and real-loop stall catch-up. See docs/PARITY_RECHECK_2026.md.
-
-## 双渲染后端验收（2026-10-23）
-
-`VulkanBackend/SpriteChecks.cs` 直接调用游戏实际 Sprite/MySprite、菜单图集与透明叠加，不以常量三角形代替2D链路验证；包括400次draw一次提交、不同变换/颜色的独立快照、跳过Present的EndFrame、静态字形缓存失效。`THSSS_DIAG_FPS=1` 输出实际FPS和每帧提交/draw；性能测试不同时开像素读回诊断。当前根脚本实际为9套渲染+6套行为，以suite入口计数，不能数PASS行。原生Wayland/X11及GL桌面证据见 `../docs/RENDER_BACKEND_STATUS_2026.md`。所有实际游戏测试使用临时配置/Score与独立录像目录，不写live game/玩家数据。
+当前行为矩阵见 `../docs/BEHAVIOR_PARITY_FIXES_2026.md`；渲染状态见 `../docs/RENDER_BACKEND_STATUS_2026.md`；音频见 `../docs/AUDIO_BACKENDS_2026.md`。所有实际游戏测试使用临时配置、Score 与独立录像目录，不写 live 玩家数据。

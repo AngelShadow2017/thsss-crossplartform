@@ -1,5 +1,7 @@
 # 东方夏夜祭 · 跨平台移植
 
+移植原版thsss（东方夏夜祭）到更现代的dotnet并且适配权平台
+
 ## 运行
 
 ```sh
@@ -36,17 +38,6 @@ dotnet publish src/Config/THSSS.Config.csproj -c Release -o artifacts/publish
 ```
 
 发布版会附带只读资源和初始配置，运行后在自己的目录创建存档/录像；**不会把 `game/Score.dat` 或你的录像打进发布包**。已有玩家数据只需保留在 `game/`，不要拿测试数据覆盖。
-
-## 打包分发
-
-```sh
-perl tools/make-dist.pl                     # 当前平台，需要已装 .NET 8 运行时
-perl tools/make-dist.pl --self-contained    # 连 .NET 运行时一起打包，免安装
-perl tools/make-dist.pl --rid win-x64,osx-arm64 --out dist/thsss-2026
-perl tools/make-dist.pl --skip-build --out dist/repack --clean
-```
-
-产出目录包含游戏 `THSSS`、配置程序 `Config`、`run-game.sh`/`run-config.sh`（Windows 下为 `.bat`）、`README.txt`、默认 `Setting.INI`、只读资源目录，以及逐文件 `SHA256SUMS.txt`。脚本会断言包内**没有** `Score.dat`、`Replay/*.rpy`、`ScreenShot/*`、`bin/`、`obj/`；`--clean` 先清空目标目录，`--skip-build` 复用已有 publish 输出。
 
 ## 验证
 
