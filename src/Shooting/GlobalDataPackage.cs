@@ -324,6 +324,11 @@ public class GlobalDataPackage
 			for (int i = 0; i < array.Length; i++)
 			{
 				string[] array2 = array[i].Split(separator);
+				// Windows' Directory.GetFiles("*.png") also returns the .png/.txt pairs whose
+				// names differ only by case or that legacy 8.3 matching folds together, while
+				// other platforms return a different subset and order. A repeated atlas key
+				// therefore survived on Linux but stopped startup on Windows. Later entries win
+				// so load order no longer decides whether the game can start.
 				TextureObject textureObject = new TextureObject();
 				textureObject.TXTure = texture;
 				textureObject.PosRect = new Rectangle(Convert.ToInt32(array2[1]), Convert.ToInt32(array2[2]), Convert.ToInt32(array2[3]), Convert.ToInt32(array2[4]));
@@ -331,7 +336,7 @@ public class GlobalDataPackage
 				textureObject.OffsetY = Convert.ToInt32(array2[6]);
 				textureObject.SrcWidth = rect.Width;
 				textureObject.SrcHeight = rect.Height;
-				TextureObjectDictionary.Add(array2[0], textureObject);
+				TextureObjectDictionary[array2[0]] = textureObject;
 			}
 		}
 		else
@@ -341,7 +346,7 @@ public class GlobalDataPackage
 			textureObject2.PosRect = new Rectangle(0, 0, rect.Width, rect.Height);
 			textureObject2.SrcWidth = rect.Width;
 			textureObject2.SrcHeight = rect.Height;
-			TextureObjectDictionary.Add(fileInfo.Name.Replace(".png", ""), textureObject2);
+			TextureObjectDictionary[fileInfo.Name.Replace(".png", "")] = textureObject2;
 		}
 	}
 
