@@ -29,11 +29,11 @@ namespace System.Drawing
         private static readonly FontCollection _fonts = new();
         private static readonly object _fontLock = new();
         private static bool _systemFontsLoaded;
+        private static SixLabors.Fonts.FontFamily[] _fallbackFamilies = Array.Empty<SixLabors.Fonts.FontFamily>();
 
         /// <summary>
-        /// The game asks for Arial and 楷体 (KaiTi). Linux rarely has either, so
-        /// map them onto installed equivalents that cover CJK, then fall back to
-        /// whatever CJK family is present.
+        /// Map the game's Windows font names to installed CJK equivalents on
+        /// macOS and Linux, without requiring a global font installation.
         /// </summary>
         private static readonly (string Wanted, string[] Equivalents)[] _aliases =
         {
@@ -44,11 +44,13 @@ namespace System.Drawing
             }),
             ("楷体", new[]
             {
+                "Kaiti SC", "STKaiti",
                 "Noto Serif CJK SC", "Source Han Serif SC", "Noto Serif CJK JP",
                 "WenQuanYi Zen Hei", "Noto Sans CJK SC",
             }),
             ("宋体", new[]
             {
+                "Songti SC", "STSong",
                 "Noto Serif CJK SC", "Source Han Serif SC", "Noto Serif CJK JP",
                 "Noto Sans CJK SC",
             }),
@@ -56,6 +58,7 @@ namespace System.Drawing
 
         private static readonly string[] _preferredFamilies =
         {
+            "PingFang SC", "Hiragino Sans GB", "Songti SC", "STHeiti", "STSong", "Kaiti SC", "STKaiti",
             "Noto Sans CJK SC", "Noto Sans CJK JP", "Source Han Sans SC",
             "Noto Serif CJK SC", "WenQuanYi Micro Hei", "WenQuanYi Zen Hei",
             "Microsoft YaHei", "SimHei",
@@ -67,8 +70,12 @@ namespace System.Drawing
             lock (_fontLock)
             {
                 if (_systemFontsLoaded) return;
-                _systemFontsLoaded = true;
                 _fonts.AddSystemFonts();
+                var fallbacks = new List<SixLabors.Fonts.FontFamily>();
+                foreach (string name in _preferredFamilies)
+                    if (_fonts.TryGet(name, out var family)) fallbacks.Add(family);
+                _fallbackFamilies = fallbacks.ToArray();
+                _systemFontsLoaded = true;
             }
         }
 
@@ -121,7 +128,11 @@ namespace System.Drawing
         }
 
         internal static RichTextOptions CreateTextOptions(Font font)
-            => new RichTextOptions(ResolveFont(font, PointsToPixels(font))) { WrappingLength = -1f };
+            => new RichTextOptions(ResolveFont(font, PointsToPixels(font)))
+            {
+                WrappingLength = -1f,
+                FallbackFontFamilies = _fallbackFamilies,
+            };
 
         private static float PointsToPixels(Font font)
         {

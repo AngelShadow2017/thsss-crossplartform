@@ -27,6 +27,7 @@ Mac 实机采样中主线程约 80.6% 的样本停在 Metal `waitUntilCompleted`
 
 - Device状态更新与是否存在GL上下文无关，所有非GL后端也必须收到混合、深度写入与光照设置。
 - `Usage.RenderTarget`走渲染纹理工厂，原生图像需要合法附件用途。
+- Sprite 按 D3DXSprite.Begin 建立线性过滤和 Clamp，在 Flush 的 FX 绑定前应用设备采样状态，防止沿用 3D 点采样导致大块纹素。End 恢复原采样状态，尊重 DoNotModifyRenderState/DoNotSaveState；共享路径同时影响 GL/Vulkan/Metal，本轮仅静态修改。
 - Metal 用 RGBA8 存储提供 RGB8 逻辑语义，保证原版 X8R8G8B8 中间目标的 Alpha 为 1：RGB 上传补 1、清屏固定 1、管线屏蔽 Alpha 写入。原 PNG/RGBA 与源 Alpha 混合保留，管线缓存区分逻辑格式；修复半透明场景经 Filter 再次衰减的问题，尚未做 Mac 画面复测。
 - 深度附件尺寸必须匹配目标；外部附件借用，不在Framebuffer销毁时释放；摘除外部附件恢复目标自己的深度。
 - `BeginFrame`/`EndFrame`在提前返回或异常时也配对；原生提交失败保留具体错误信息。

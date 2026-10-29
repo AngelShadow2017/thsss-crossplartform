@@ -1,5 +1,6 @@
 // Cross-platform sprite batching (replaces SlimDX.Direct3D9.Sprite, which used D3DXSprite).
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using Silk.NET.OpenGL;
 using THSSS.Graphics;
@@ -46,6 +47,7 @@ public class Sprite : IDisposable
     private SpriteFlags _flags;
     private (BlendingFactor Source, BlendingFactor Destination, BlendOperation Operation, bool Enabled) _savedBlend;
     private bool _savedDepth, _savedCull;
+    private readonly Dictionary<(int, SamplerState), int> _savedSamplers = new();
 
     public Sprite(Device device)
     {
@@ -88,6 +90,7 @@ public class Sprite : IDisposable
         _currentTextureObject = null;
         _flags = flags;
         _savedBlend = _device.CaptureBlendState();
+        if ((flags & SpriteFlags.DoNotSaveState) == 0) _device.CaptureSamplerStates(_savedSamplers);
         (_savedDepth, _savedCull) = _device.RenderBackend.QueryRasterState();
         if ((flags & SpriteFlags.DoNotModifyRenderState) != 0)
         {
@@ -104,6 +107,7 @@ public class Sprite : IDisposable
             _device.SetRenderState(RenderState.DestinationBlend, Blend.InverseSourceAlpha);
         }
         _device.ApplyBlendState();
+        _device.SetSpriteSamplerDefaults();
         _device.RenderBackend.SetRasterState(false, false);
         _device.ActiveSpriteBatch = this;
     }
@@ -117,6 +121,8 @@ public class Sprite : IDisposable
         if ((_flags & SpriteFlags.DoNotSaveState) != 0) return;
         _device.RestoreBlendState(_savedBlend);
         _device.RenderBackend.SetRasterState(_savedDepth, _savedCull);
+        _device.RestoreSamplerStates(_savedSamplers);
+        _savedSamplers.Clear();
     }
 
     public void SetTransform(Matrix transform) => Transform = transform;
@@ -217,6 +223,9 @@ public class Sprite : IDisposable
         var effect = _device.ActiveEffect;
         if (_gl != null) _gl.ActiveTexture(TextureUnit.Texture0);
         _device.RenderBackend.BindTexture(_currentTextureObject?.RenderTexture);
+        // Apply the device's current sprite sampler before an FX pass optionally
+        // replaces it. Metal/Vulkan retain sampler state across unrelated draws.
+        _device.ApplySamplerState();
         if (effect != null)
         {
             effect.SourceTexture = _currentTextureObject;

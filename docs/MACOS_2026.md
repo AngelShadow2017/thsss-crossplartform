@@ -56,6 +56,14 @@ sh tools/package-macos.command
 
 管线缓存同时区分逻辑 RGB 与 RGBA；两者的原生像素格式同为 RGBA8，但 Alpha 写掩码不同。已有软件 API 驱动增加 RGB/RGBA 清屏 Alpha、普通透明与 ADD 因子、写掩码及缓存切换断言；本轮仅静态检查，未运行驱动或进行 Apple GPU 画面验证。
 
+## 精灵过滤与对话文本
+
+Mac 对照图中的太极纹理出现大块纹素阶梯。静态路径确认 3D 绘制会按 D3D9 默认设置点采样，而精灵绘制未建立自己的采样状态，Metal/Vulkan 会沿用上一次 sampler。Sprite 现按 D3DXSprite.Begin 规则建立 Clamp + 线性 Min/Mag/Mip，并在每次 Flush、FX 绑定之前应用当前设备采样状态。End 默认恢复 Begin 前的状态；DoNotModifyRenderState 保留调用方设置，DoNotSaveState 不恢复。快照字典随 Sprite 复用，不在每次 Begin 分配；没有增大 640×480 逻辑表面或添加 MSAA。
+
+现有 Vulkan 实际 Sprite 检查增加了放大红蓝双纹素的线性插值，以及 End 恢复点采样、DoNotModifyRenderState 保留点采样的回归路径；本轮没有运行，Mac 视觉差异仍待复测。
+
+对话 A 路线的 LoadConversation2 原用 Encoding.Default；现代 .NET 将其解释为 UTF-8，而实际 Story/1-1A.csv 是 CP936，按 UTF-8 严格解码失败。现与其他原版对白路径一致，显式使用 CP936，未重编码或修改资源文件。字体选择补充已安装的 Kaiti SC/STKaiti、Songti SC/STSong、PingFang SC 等 Mac 中文字体，并将可用候选传入 SixLabors 的 FallbackFontFamilies，使测量、换行和实际绘制采用同一回退规则；不下载或全局安装字体。只完成静态检查，尚未进行 Mac 对话显示验证。
+
 ## 3D 输入与异常退出
 
 部分原版背景使用只有 Position/UV 的顶点流，而共享 3D shader 仍声明 Normal/Color/Secondary 输入。Metal 管线创建要求描述其保留的输入，不能依赖 `uHasNormal` 等运行时开关消除描述符要求。后端用槽 29 的常量流 `(0,0,0,1)` 补足缺失属性，`stepFunction=constant`、`stepRate=0`，由 Metal 按 shader 类型截取分量，保持 GL 默认属性值语义；真实顶点流仍在槽 30，uniform 使用槽 0–28。仅当存在属性引用时才配置相应流布局：没有缺失属性的管线不配置槽 29，也不绑定常量数据。是否使用常量流与管线一起缓存，创建和绘制使用同一条件，避免无属性引用的非零 stride 布局触发原生断言。没有修改原版背景顶点数据或关卡逻辑。
