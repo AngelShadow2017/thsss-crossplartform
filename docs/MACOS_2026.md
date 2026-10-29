@@ -66,7 +66,7 @@ Mac 对照图中的太极纹理出现大块纹素阶梯。静态路径确认 3D 
 
 Mac 实机在菜单版本号排版时曾报 MissingFontTableException（loca）。Drawing 2.1.5 的依赖下界为 Fonts 2.0.8；该版本通过 FileFontMetrics 延迟读取完整字体，TextLayout 会对全部回退字体执行 UpdatePositions，即使正文只有 ASCII。字体名称存在不能证明该字面可被解析，不能把全部系统候选直接塞入 FallbackFontFamilies。
 
-主字体和回退字体现均先读取 FontMetrics.UnitsPerEm，触发完整字面解析；仅在候选选择边界隔离 FontException，输出 `[FONT]` 的字体名、请求样式、文件路径和完整异常，再尝试其他已安装候选。按字体族与请求样式缓存验证结果，避免逐帧重新解析或重复报告。回退只保留一个已经验证并含中文字形的字体族，排除主字体自身，避免重复定位；测量、换行和实际绘制共用同一选择规则。找不到任何可解析字体仍明确失败，排版和绘制异常不在此处吞掉。
+主字体和回退字体现均先读取 FontMetrics.UnitsPerEm，触发完整字面解析；仅在候选选择边界隔离 InvalidFontFileException 与 FontException，输出 `[FONT]` 的字体名、请求样式、文件路径和完整异常，再尝试其他已安装候选。Fonts 2.x 中 MissingFontTableException 继承 InvalidFontFileException，而后者直接继承 Exception，不属于 FontException 分支；只捕获 FontException 接不住缺失 loca 的错误。按字体族与请求样式缓存验证结果，避免逐帧重新解析或重复报告。回退只保留一个已经验证并含中文字形的字体族，排除主字体自身，避免重复定位；测量、换行和实际绘制共用同一选择规则。找不到任何可解析字体仍明确失败，排版和绘制异常不在此处吞掉。
 
 已有文字检查增加了临时缺失 loca 字体：从已安装 TrueType 字体的副本移除表标记，只写临时目录，验证元数据可读但完整解析失败的候选被排除、完整错误被保留且失败结果可复用。本轮仅静态检查，未构建、未运行该检查或进行 Mac 菜单/对话复测；GBK 和采样修复保留。
 
