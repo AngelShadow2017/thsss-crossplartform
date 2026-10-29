@@ -24,6 +24,8 @@ XAudio2 vtable：SetVolume12、DestroyVoice18、Start/Stop19/20、SubmitSourceBu
 
 AudioQueue输出采用交错float32 PCM。回调只表示系统已取得数据，退休还必须满足设备SampleTime已越过该块；暂停冻结游标，Clear重设时间起点，Dispose同步等待回调。原生ABI与验证说明见[MACOS_2026.md](MACOS_2026.md)。
 
+重复设置相同输出矩阵不重置队列；没有待播数据时只更新矩阵。CoreAudio Clear 仅调用同步 AudioQueueStop，使用其自带的 Reset 语义，避免重复重置。`THSSS_DIAG_INPUT=1` 可记录 Pause/Clear/Start 耗时，供菜单移动卡顿的 Mac 实机复核；本轮仅静态修改，未运行音频或游戏验证。
+
 ## 验证
 
 ```sh

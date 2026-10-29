@@ -52,6 +52,9 @@ public sealed unsafe partial class MetalRenderBackend
             finally{Release(d);}
         }
         Call(e,"setDepthStencilState:",state);Call(e,"setVertexBuffer:offset:atIndex:",v.Native,0,30);
+        ReadOnlySpan<float> defaultAttribute = stackalloc float[] { 0f, 0f, 0f, 1f };
+        fixed (float* values = defaultAttribute)
+            Call(e, "setVertexBytes:length:atIndex:", (nint)values, 4 * sizeof(float), MetalShader.DefaultAttributeBufferIndex);
         foreach(var b in _uniforms)fixed(byte*p=b.Value){Call(e,"setVertexBytes:length:atIndex:",(nint)p,b.Value.Length,b.Key);Call(e,"setFragmentBytes:length:atIndex:",(nint)p,b.Value.Length,b.Key);}
         Call(e,"setFragmentTexture:atIndex:",t.Native,1);Call(e,"setFragmentSamplerState:atIndex:",Sampler(_sampling??t.Sampling),1);
         Call(e,"drawPrimitives:vertexStart:vertexCount:",kind switch{PrimitiveKind.TriangleList=>3,PrimitiveKind.TriangleStrip=>4,PrimitiveKind.LineList=>1,_=>throw new ArgumentOutOfRangeException(nameof(kind))},startVertex,vertexCount);

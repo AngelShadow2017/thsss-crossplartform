@@ -48,7 +48,25 @@ sh tools/package-macos.command
 
 混合/深度状态、目标/深度附件、Clear、3D 绘制、FX 开始/结束及参数变化之前提交待绘批次，保持原先的绘制顺序。文字显式 `Flush` 后才允许更新或释放字形纹理，不再依赖 Transform 自赋值的副作用。Sprite uniform 缓冲复用，普通提交不再创建三个临时数组。
 
-本次仅在 Windows 静态分析和修改，未构建、未打包、未运行测试或游戏，未拉取 LFS 资源。上述改动尚需 M 系列 Mac 验证启动、关卡绘制、暂停 FX、声音和帧率，不能把以前的报告或软件驱动结果当成本次实机证据。Metal 后端原有的每次绘制同步等待仍保留，尚未测量这次优化后的实际性能。
+## 3D 输入与异常退出
+
+部分原版背景使用只有 Position/UV 的顶点流，而共享 3D shader 仍声明 Normal/Color/Secondary 输入。Metal 管线创建要求描述所有声明的输入，不能依赖 `uHasNormal` 等运行时开关消除描述符要求。后端用槽 29 的常量流 `(0,0,0,1)` 补足缺失属性，`stepFunction=constant`、`stepRate=0`，由 Metal 按 shader 类型截取分量，保持 GL 默认属性值语义；真实顶点流仍在槽 30，uniform 使用槽 0–28。没有修改原版背景顶点数据或关卡逻辑。
+
+Silk.NET 2.23 的渲染回调抛出异常时不会复位内部 render-loop 标记，随后的窗口 Dispose 会再次抛出 Reset 异常。入口在渲染回调边界记录 `ExceptionDispatchInfo` 并结束循环，让框架正常复位标记后再传播原异常，保留原始堆栈和非零退出码。
+
+## 菜单音效耗时
+
+菜单每次播放选择音都会设置输出矩阵，再 Stop/Flush/Submit/Start。公共音频层在矩阵未变化时直接返回；原队列为空时只更新矩阵，不为不存在的数据重建队列。CoreAudio 的 `AudioQueueStop(..., true)` 已包含 Reset，Clear 不再额外调用一次 `AudioQueueReset`。
+
+要记录实际 AudioQueue 操作耗时，在新发布目录运行：
+
+```sh
+THSSS_DIAG_INPUT=1 THSSS_DIAG_FPS=1 sh run-game.sh
+```
+
+`[AUDIO-TIMING]` 分别输出 Pause/Clear/Start 耗时，默认关闭。耗时包含调用期间的同步等待；不把这些日志当作整个键盘输入路径的采样。
+
+已有 M 系列 Mac 实机反馈确认菜单可进入、菜单移动会卡顿、进关时因缺少 `aNormal` 顶点描述而崩溃；输入源为英文/ABC。本次针对这些反馈仅在 Windows 静态分析和修改，未构建、未打包、未运行测试或游戏，也未修改玩家数据。进关修复和菜单音效优化均需 Mac 复测，不能宣称卡顿已消失或达到目标帧率。Metal 后端原有的每次绘制同步等待仍保留。
 
 ## 自动验证
 

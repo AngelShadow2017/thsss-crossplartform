@@ -7,10 +7,13 @@ using static THSSS.Graphics.Metal.MetalNative;
 namespace THSSS.Graphics.Metal;
 internal sealed unsafe class MetalShader:MetalResource,IRenderShader
 {
+    internal const int DefaultAttributeBufferIndex = 29;
+    private readonly int _vertexInputCount;
     private readonly nint _fragmentLibrary,_vertexFunction,_fragmentFunction;
     private readonly Dictionary<string,nint> _pipelines=new();
     internal MetalShader(MetalRenderBackend owner,ShaderSource source):base(owner,CompileLibrary(owner,source.Vertex,true,source.VertexInputs))
     {
+        _vertexInputCount = source.VertexInputs.Length;
         try
         {
             _fragmentLibrary=CompileLibrary(owner,source.Fragment,false,source.VertexInputs);
@@ -42,9 +45,27 @@ internal sealed unsafe class MetalShader:MetalResource,IRenderShader
             Call(d,"setVertexFunction:",_vertexFunction);Call(d,"setFragmentFunction:",_fragmentFunction);
             foreach(var a in layout.Attributes.Span)
             {
+                if (a.ComponentCount <= 0) continue;
                 nint item=Call(Call(v,"attributes"),"objectAtIndexedSubscript:",a.Location);
                 Call(item,"setFormat:",AttributeFormat(a));Call(item,"setOffset:",a.ByteOffset);Call(item,"setBufferIndex:",30);
             }
+            // Unlike GL, Metal requires a descriptor even for optional shader inputs.
+            // Missing attributes read the GL default (0,0,0,1) from a constant stream.
+            for (int location = 0; location < _vertexInputCount; location++)
+            {
+                bool supplied = false;
+                foreach (var attribute in layout.Attributes.Span)
+                    if (attribute.Location == location && attribute.ComponentCount > 0) { supplied = true; break; }
+                if (supplied) continue;
+                nint item = Call(Call(v, "attributes"), "objectAtIndexedSubscript:", location);
+                Call(item, "setFormat:", 31); // MTLVertexFormatFloat4; Metal converts vector lengths.
+                Call(item, "setOffset:", 0);
+                Call(item, "setBufferIndex:", DefaultAttributeBufferIndex);
+            }
+            nint defaults = Call(Call(v, "layouts"), "objectAtIndexedSubscript:", DefaultAttributeBufferIndex);
+            Call(defaults, "setStride:", 4 * sizeof(float));
+            Call(defaults, "setStepFunction:", 0); // MTLVertexStepFunctionConstant.
+            Call(defaults, "setStepRate:", 0);
             nint binding=Call(Call(v,"layouts"),"objectAtIndexedSubscript:",30);
             Call(binding,"setStride:",layout.Stride);Call(binding,"setStepFunction:",1);Call(d,"setVertexDescriptor:",v);
             nint c=Call(Call(d,"colorAttachments"),"objectAtIndexedSubscript:",0);

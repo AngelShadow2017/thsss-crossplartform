@@ -107,7 +107,7 @@ public sealed unsafe partial class MetalRenderBackend : IRenderBackend
     public void SetSamplerState(SamplerStateBlock state)=>_sampling=state;
     public void BindTexture(IRenderTexture? texture)=>_texture=texture==null?null:Resource<MetalTexture>(texture);
     public void SetUniformBlock(int binding,IRenderBuffer? buffer,ReadOnlySpan<byte> data)
-    {CheckAlive();if(binding<0||binding>=30)throw new ArgumentOutOfRangeException(nameof(binding));if(buffer!=null)Resource<MetalBuffer>(buffer).Update(data,0);_uniforms[binding]=data.ToArray();}
+    {CheckAlive();if(binding<0||binding>=MetalShader.DefaultAttributeBufferIndex)throw new ArgumentOutOfRangeException(nameof(binding));if(buffer!=null)Resource<MetalBuffer>(buffer).Update(data,0);_uniforms[binding]=data.ToArray();}
     public bool TryGetError(out string message){message=string.Empty;return false;}
     public void Dispose()
     {

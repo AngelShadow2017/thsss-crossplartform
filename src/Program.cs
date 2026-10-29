@@ -2,6 +2,7 @@
 // RenderForm + Direct3D9 device the original game created.
 using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using Silk.NET.Windowing;
 using Silk.NET.OpenGL;
 using SlimDX.Direct3D9;
@@ -20,6 +21,7 @@ public static class Program
     private static WindowInputBridge _inputBridge;
     private static Game_Main _game;
     private static int _frame;
+    private static ExceptionDispatchInfo _renderFailure;
 
     [STAThread]
     public static void Main(string[] args)
@@ -66,11 +68,10 @@ public static class Program
         _window = Window.Create(options);
         _window.Load += OnLoad;
         _window.Render += OnRender;
-        try { _window.Run(); }
-        catch (Exception runError)
+        try
         {
-            Console.Error.WriteLine("[Run] " + runError);
-            throw;
+            _window.Run();
+            _renderFailure?.Throw();
         }
         finally
         {
@@ -130,6 +131,19 @@ public static class Program
     private static double _renderMilliseconds;
 
     private static void OnRender(double deltaTime)
+    {
+        if (_renderFailure != null) return;
+        try { RenderFrame(deltaTime); }
+        catch (Exception error)
+        {
+            // Silk 2.23 clears its render-loop flag only after callbacks return.
+            // Let it unwind normally, then rethrow with the original stack in Run.
+            _renderFailure = ExceptionDispatchInfo.Capture(error);
+            _window.IsClosing = true;
+        }
+    }
+
+    private static void RenderFrame(double deltaTime)
     {
         if (_game == null || _window.IsClosing) return;
         _inputBridge.ApplyCursor();

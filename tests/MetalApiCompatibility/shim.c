@@ -106,6 +106,7 @@ static U integer_message(Node *o,const char *s,U a,U b,U c,U d) {
     if (!strcmp(s,"setHeight:")) { o->height=a; return 0; }
     if (!strcmp(s,"setPixelFormat:")) { o->format=a; return 0; }
     if (!strcmp(s,"setStride:")) { o->stride=a; return 0; }
+    if (!strcmp(s,"setStepRate:")) return 0;
     if (!strcmp(s,"setOffset:")) { o->offset=a; return 0; }
     if (!strcmp(s,"setBufferIndex:")) { o->index=a; return 0; }
     if (!strcmp(s,"setFormat:")) { o->format=a; return 0; }

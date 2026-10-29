@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 #if THSSS_MACOS || THSSS_COREAUDIO_TEST
 namespace THSSS.Audio;
@@ -29,13 +30,13 @@ internal sealed unsafe class CoreAudioBackend:IAudioBackend
     [DllImport(Library)]private static extern int AudioQueuePause(nint queue);
     [DllImport(Library)]private static extern int AudioQueueStop(nint queue,byte immediately);
     [DllImport(Library)]private static extern int AudioQueueDispose(nint queue,byte immediately);
-    [DllImport(Library)]private static extern int AudioQueueReset(nint queue);
     [DllImport(Library)]private static extern int AudioQueueSetParameter(nint queue,uint parameter,float value);
     [DllImport(Library)]private static extern int AudioQueueGetCurrentTime(nint queue,nint timeline,out TimeStamp time,out byte discontinuity);
     private static void Check(int s,string op){if(s!=0)throw new InvalidOperationException($"CoreAudio {op} failed (OSStatus={s}).");}
     private sealed class Chunk{internal nint Buffer;internal int Frames;internal long End;internal bool Acquired;}
     private sealed class Source:IAudioSource
     {
+        private static readonly bool TraceInput = Environment.GetEnvironmentVariable("THSSS_DIAG_INPUT") == "1";
         private readonly CoreAudioBackend _owner;private readonly object _sync=new();
         private readonly List<Chunk> _chunks=new();private readonly OutputCallback _callback;private readonly int _rate;
         private nint _queue;private bool _playing,_disposed;private long _retired,_submitted,_played;private double _epoch;
@@ -76,13 +77,37 @@ internal sealed unsafe class CoreAudioBackend:IAudioBackend
         }
         public int SampleOffset{get{Alive();lock(_sync)return checked((int)Math.Max(0,Played()-_retired));}}
         public bool IsPlaying{get{Alive();lock(_sync)return _playing&&Played()<_submitted;}}
-        public void Play(){Alive();Check(AudioQueueStart(_queue,0),"Start");lock(_sync)_playing=true;}
-        public void Pause(){Alive();lock(_sync)Played();Check(AudioQueuePause(_queue),"Pause");lock(_sync){Played();_playing=false;}}
+        public void Play()
+        {
+            Alive();
+            long start = TraceInput ? Stopwatch.GetTimestamp() : 0;
+            Check(AudioQueueStart(_queue,0),"Start");
+            lock(_sync)_playing=true;
+            TraceTiming("Start", start);
+        }
+        public void Pause()
+        {
+            Alive();
+            long start = TraceInput ? Stopwatch.GetTimestamp() : 0;
+            lock(_sync)Played();
+            Check(AudioQueuePause(_queue),"Pause");
+            lock(_sync){Played();_playing=false;}
+            TraceTiming("Pause", start);
+        }
         public void SetGain(float gain){Alive();if(!float.IsFinite(gain)||gain<0)throw new ArgumentOutOfRangeException(nameof(gain));Check(AudioQueueSetParameter(_queue,1,gain),"SetVolume");}
         public void Clear()
         {
-            Alive();Check(AudioQueueStop(_queue,1),"Stop");Check(AudioQueueReset(_queue),"Reset");
+            Alive();
+            long start = TraceInput ? Stopwatch.GetTimestamp() : 0;
+            // AudioQueueStop already calls AudioQueueReset; do not reset it twice.
+            Check(AudioQueueStop(_queue,1),"Stop");
             lock(_sync){foreach(var c in _chunks)Check(AudioQueueFreeBuffer(_queue,c.Buffer),"FreeBuffer");_chunks.Clear();_retired=_submitted=_played=0;_playing=false;_epoch=AudioQueueGetCurrentTime(_queue,0,out var ts,out _)==0?ts.SampleTime:0;}
+            TraceTiming("Clear", start);
+        }
+        private static void TraceTiming(string operation, long start)
+        {
+            if (TraceInput)
+                Console.Error.WriteLine($"[AUDIO-TIMING] op={operation} ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:F2}");
         }
         public void Dispose(){if(_disposed)return;Check(AudioQueueDispose(_queue,1),"Dispose");lock(_sync){_disposed=true;_chunks.Clear();_queue=0;}_owner._sources.Remove(this);GC.KeepAlive(_callback);}
     }

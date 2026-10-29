@@ -28,6 +28,7 @@ Metal直接调用系统框架，不经MoltenVK；MSL由同一份GLSL转译。发
 - 深度附件尺寸必须匹配目标；外部附件借用，不在Framebuffer销毁时释放；摘除外部附件恢复目标自己的深度。
 - `BeginFrame`/`EndFrame`在提前返回或异常时也配对；原生提交失败保留具体错误信息。
 - Vulkan acquire只在Success/Suboptimal后等待关联fence，不在Timeout/OutOfDate时等待未提交fence。
+- Metal 为 shader 声明但顶点流未提供的属性绑定 `(0,0,0,1)` 常量流，不能依靠运行时 uniform 分支跳过顶点描述符校验。常量流槽 29、实际顶点槽 30，uniform 槽 0–28；这组修复针对 Mac 实机日志中的进关崩溃，尚未复测。
 
 ## 验证
 

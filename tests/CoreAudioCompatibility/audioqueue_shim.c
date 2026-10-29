@@ -17,7 +17,8 @@ int AudioQueueEnqueueBuffer(Queue*q,Buffer*b,uint32_t count,void*desc){if(b->siz
 int AudioQueueFreeBuffer(Queue*q,Buffer*b){free(b->data);free(b);return 0;}
 int AudioQueueStart(Queue*q,void*stamp){q->playing=1;return 0;}
 int AudioQueuePause(Queue*q){q->playing=0;return 0;}
-int AudioQueueStop(Queue*q,uint8_t now){q->playing=0;q->count=0;return now==1?0:-3;}
+/* Apple's synchronous Stop also resets the queue timeline. */
+int AudioQueueStop(Queue*q,uint8_t now){q->playing=0;q->frames=0;q->count=0;return now==1?0:-3;}
 int AudioQueueReset(Queue*q){q->frames=0;q->count=0;return 0;}
 int AudioQueueDispose(Queue*q,uint8_t now){if(now!=1)return -4;for(int i=0;i<q->count;i++)AudioQueueFreeBuffer(q,q->buffers[i]);free(q);return 0;}
 int AudioQueueSetParameter(Queue*q,uint32_t p,float gain){if(p!=1)return -5;q->gain=gain;return 0;}
