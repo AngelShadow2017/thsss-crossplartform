@@ -1,0 +1,106 @@
+# Shared driver plumbing for every THSSS DejaGnu toolkit.
+#
+# Only the verdict logic lives here: spawning a fixture, watching for its own PASS
+# marker, applying a per-case timeout, and deciding the exit is acceptable. Anything
+# toolkit specific (which fixtures exist, what to build, how to stage data) stays in
+# that toolkit's .exp so a change in one driver cannot silently alter another.
+#
+# Loaded via `load_lib thsss.exp`; DejaGnu resolves it from tests/dejagnu/lib because
+# srcdir is tests/dejagnu/<tool> and ../lib is searched first.
+
+# Stop a spawned process that a case had to abandon.
+#
+# `kill` is an Expect convenience, not a guaranteed Tcl command: under runtest it may be
+# absent, and a failed timeout cleanup used to surface as "invalid command name kill"
+# instead of the real verdict. Close the spawn id first, then fall back to the OS.
+proc thsss_abandon {} {
+    if {[catch {close -i $::spawn_id} message]} {
+        if {[catch {exec kill -9 [exp_pid]} message]} {
+            send_log "warning: could not stop the timed-out fixture: $message\n"
+        }
+    }
+    catch {wait}
+}
+
+# Run one fixture and judge it.
+#
+#   label           name shown in the .sum
+#   command         argv list; spawned without a shell
+#   marker          regex the fixture itself prints on success
+#   expect_failure  1 when a non-zero exit is the expected outcome (error-path tests)
+#   budget          seconds before the case is killed and failed
+#   workdir         directory to cd into, or "" to keep the current one
+#
+# A suite must print its own marker: a fixture that dies before printing would
+# otherwise look like a pass because its exit code happens to be zero. A case that
+# matches the marker but exits non-zero is still a failure, and vice versa.
+proc thsss_run {label command marker {expect_failure 0} {budget 240} {workdir ""}} {
+    global timeout
+    set previous $timeout
+    set previous_dir [pwd]
+    set timeout $budget
+    if {$workdir ne ""} { cd $workdir }
+    set matched 0
+    spawn -noecho {*}$command
+    expect {
+        -re $marker { set matched 1; exp_continue }
+        eof { }
+        timeout {
+            set timeout $previous
+            thsss_abandon
+            catch {cd $previous_dir}
+            fail "$label (timeout after ${budget}s)"
+            return
+        }
+    }
+    set timeout $previous
+    set status [wait]
+    catch {cd $previous_dir}
+    # CHILDKILLED means a signal ended the process; that is never an acceptable exit,
+    # even for a test that expects failure.
+    set signalled [expr {[llength $status] > 4 && [lindex $status 4] eq "CHILDKILLED"}]
+    set exited_ok [expr {!$signalled && [lindex $status 2] == 0 && [lindex $status 3] == 0}]
+    set verdict [expr {$expect_failure ? !$exited_ok : $exited_ok}]
+    if {$matched && $verdict} {
+        pass $label
+    } else {
+        fail "$label (marker=$matched, signal=$signalled, status=$status)"
+    }
+}
+
+# Repository root, supplied by the runner scripts so a driver never guesses.
+proc thsss_root {} {
+    if {![info exists ::env(THSSS_TEST_ROOT)]} {
+        error "THSSS_TEST_ROOT must point at the repository root"
+    }
+    return $::env(THSSS_TEST_ROOT)
+}
+
+# `dotnet run` for one fixture under tests/testcase. Extra arguments after the project
+# are passed to the fixture, not to dotnet.
+proc thsss_dotnet_run {name args} {
+    set project [file join [thsss_root] tests testcase $name $name.csproj]
+    set command [list dotnet run --project $project -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false]
+    if {[llength $args] > 0} { lappend command -- {*}$args }
+    return $command
+}
+
+# Isolated data root for fixtures that need game assets: read-only asset trees are
+# symlinked, mutable files are copied, so a fixture can never reach the player's own
+# save or settings. The directory is created under the system temp area, not the repo.
+proc thsss_prepare_data {label} {
+    set root [thsss_root]
+    set base [expr {[info exists ::env(TMPDIR)] ? $::env(TMPDIR) : "/tmp"}]
+    set data [file join $base thsss-dejagnu $label]
+    file delete -force $data
+    file mkdir $data
+    foreach name {Image Model FX BGM Sound Story CS BPic} {
+        set source [file join $root game $name]
+        if {[file isdirectory $source]} { catch {file link -symbolic [file join $data $name] $source} }
+    }
+    foreach name {Setting.INI Score.dat} {
+        set source [file join $root game $name]
+        if {[file exists $source]} { file copy -force $source [file join $data $name] }
+    }
+    return $data
+}

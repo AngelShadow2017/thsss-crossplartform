@@ -1,20 +1,28 @@
-# Linux software API drivers execute the real managed native-call paths.
-set timeout 120
-proc mac_contract {name command marker} {
-    spawn -noecho {*}$command
-    set matched 0
-    expect {
-        -re $marker {set matched 1; exp_continue}
-        timeout {fail "$name (timeout)"; catch {exec kill -TERM [exp_pid]}; catch {close}; catch {wait}; return}
-        eof {}
-    }
-    set state [wait]
-    set signal [expr {[llength $state]>4 && [lindex $state 4]=="CHILDKILLED"}]
-    if {$matched && !$signal && [lindex $state 2]==0 && [lindex $state 3]==0} {pass $name} else {fail "$name ($state; marker=$matched)"}
+# Software API drivers that exercise the real managed native-call paths on Linux.
+# The driver never executes MSL or Apple audio; it validates the call contract.
+load_lib thsss.exp
+
+if {![info exists env(THSSS_MAC_CONTRACT_DIR)]} {
+    error "Use tools/run-mac-regressions.sh to build the API drivers."
 }
-if {![info exists env(THSSS_TEST_ROOT)] || ![info exists env(THSSS_MAC_CONTRACT_DIR)]} {error "Use tools/run-mac-regressions.sh to build API drivers."}
-set root $env(THSSS_TEST_ROOT)
+set root [thsss_root]
 set output $env(THSSS_MAC_CONTRACT_DIR)
-mac_contract "AudioQueue native ABI and queue software contract" [list dotnet [file join $root tests testcase CoreAudioCompatibility bin Debug net8.0 CoreAudioCompatibility.dll] [file join $output libaudioqueue.so]] {PASS CoreAudioCompatibility:}
-mac_contract "Metal native selectors, command recording and resource software contract" [list dotnet [file join $root tests testcase MetalApiCompatibility bin Debug net8.0 MetalApiCompatibility.dll]] {PASS: [0-9]+ assertions; actual Metal backend P/Invoke}
-mac_contract "Real GLSL SPIR-V MSL translation" [list dotnet [file join $root tests testcase MetalCompatibility bin Debug net8.0 MetalCompatibility.dll]] {PASS MetalCompatibility:}
+
+# These fixtures are already built by the runner, so the committed DLLs are used
+# directly rather than going through `dotnet run` and rebuilding per case.
+proc built {suite args} {
+    global root
+    set command [list dotnet [file join $root tests testcase $suite bin Debug net8.0 $suite.dll]]
+    if {[llength $args] > 0} { lappend command {*}$args }
+    return $command
+}
+
+thsss_run "AudioQueue native ABI and queue software contract" \
+    [built CoreAudioCompatibility [file join $output libaudioqueue.so]] \
+    {PASS CoreAudioCompatibility:} 0 120
+thsss_run "Metal native selectors, command recording and resource software contract" \
+    [built MetalApiCompatibility] \
+    {PASS: [0-9]+ assertions; actual Metal backend P/Invoke} 0 120
+thsss_run "Real GLSL SPIR-V MSL translation" \
+    [built MetalCompatibility] \
+    {PASS MetalCompatibility:} 0 120
