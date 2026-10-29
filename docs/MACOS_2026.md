@@ -48,6 +48,14 @@ sh tools/package-macos.command
 
 混合/深度状态、目标/深度附件、Clear、3D 绘制、FX 开始/结束及参数变化之前提交待绘批次，保持原先的绘制顺序。文字显式 `Flush` 后才允许更新或释放字形纹理，不再依赖 Transform 自赋值的副作用。Sprite uniform 缓冲复用，普通提交不再创建三个临时数组。
 
+## 中间纹理与透明度
+
+原版 `ScreenTexture` 使用 `X8R8G8B8` 屏幕中间目标，没有可写 Alpha。Metal 现提供 RGB8 逻辑语义：物理仍用 RGBA8 存储，上传 RGB 时补 Alpha=1，清颜色时固定 Alpha=1，绘制管线只允许写 RGB（writeMask=14）。源纹理和顶点的 Alpha 仍正常参与 RGB 混合，普通 PNG/RGBA 纹理保留自己的 Alpha。
+
+此前 Metal 没有声明 RGB8 支持，兼容层把这些目标替换成普通 RGBA。半透明图案会改变中间目标的 Alpha，最终 Filter 再按它混合整张场景，造成重复衰减。用户反馈的道具得分透明度异常及敌人发弹特效发黑均经过这条合成路径。本轮修复格式语义，不将 PNG 或 shader 输出整体改为预乘 Alpha，也不修改 ADD 的 SrcAlpha/One 公式。
+
+管线缓存同时区分逻辑 RGB 与 RGBA；两者的原生像素格式同为 RGBA8，但 Alpha 写掩码不同。已有软件 API 驱动增加 RGB/RGBA 清屏 Alpha、普通透明与 ADD 因子、写掩码及缓存切换断言；本轮仅静态检查，未运行驱动或进行 Apple GPU 画面验证。
+
 ## 3D 输入与异常退出
 
 部分原版背景使用只有 Position/UV 的顶点流，而共享 3D shader 仍声明 Normal/Color/Secondary 输入。Metal 管线创建要求描述其保留的输入，不能依赖 `uHasNormal` 等运行时开关消除描述符要求。后端用槽 29 的常量流 `(0,0,0,1)` 补足缺失属性，`stepFunction=constant`、`stepRate=0`，由 Metal 按 shader 类型截取分量，保持 GL 默认属性值语义；真实顶点流仍在槽 30，uniform 使用槽 0–28。仅当存在属性引用时才配置相应流布局：没有缺失属性的管线不配置槽 29，也不绑定常量数据。是否使用常量流与管线一起缓存，创建和绘制使用同一条件，避免无属性引用的非零 stride 布局触发原生断言。没有修改原版背景顶点数据或关卡逻辑。

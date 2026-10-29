@@ -35,6 +35,7 @@ internal static class Program
     private static void TestTextureAndClear()
     {
         using var backend = new MetalRenderBackend();
+        Check(backend.Features.SupportsRgb8Textures,"Metal advertises opaque RGB texture semantics");
         using var texture = backend.CreateRenderTexture(2, 2, TextureFormat.Rgba8);
         byte[] padded = { 1,2,3,4, 5,6,7,8, 99,99,99,99, 9,10,11,12, 13,14,15,16 };
         texture.Upload(padded, 12);
@@ -60,6 +61,11 @@ internal static class Program
         using var rgbFrame = backend.CreateFramebuffer(rgb,DepthFormat.None,1,2);
         backend.BindFramebuffer(rgbFrame);
         Bytes(new byte[] {1,2,3,255,4,5,6,255},backend.ReadPixels(0,0,1,2),"RGB expanded alpha");
+        backend.Clear(ClearMask.Color,.25f,.5f,.75f,0,1,0);
+        Bytes(new byte[] {64,128,191,255},backend.ReadPixels(0,0,1,1),"RGB clear discards requested alpha zero");
+        backend.BindFramebuffer(framebuffer);
+        backend.Clear(ClearMask.Color,.25f,.5f,.75f,0,1,0);
+        Bytes(new byte[] {64,128,191,0},backend.ReadPixels(0,0,1,1),"RGBA clear retains requested alpha zero");
         backend.RestoreFramebufferBindings(framebuffer, bgraFrame);
         backend.Clear(ClearMask.Color,0,1,0,1,1,0);
         Bytes(new byte[] {255,0,0,255},backend.ReadPixels(0,0,1,1),"independent read binding");
@@ -121,6 +127,34 @@ internal static class Program
         backend.Draw(shader,vertices,layout,PrimitiveKind.TriangleList,1,3);
         Check(!Trace.Contains("newRenderPipelineStateWithDescriptor:error:",StringComparison.Ordinal),"pipeline cache reused");
         Equal((nuint)1,Native.shim_draw_arg(1),"nonzero vertex start forwarded");
+        using var rgbaTarget = backend.CreateRenderTexture(8,8,TextureFormat.Rgba8);
+        using var rgbTarget = backend.CreateRenderTexture(8,8,TextureFormat.Rgb8);
+        using var rgbaFrame = backend.CreateFramebuffer(rgbaTarget,DepthFormat.None,8,8);
+        using var rgbFrame = backend.CreateFramebuffer(rgbTarget,DepthFormat.None,8,8);
+        foreach (bool additive in new[] { false,true })
+        {
+            backend.SetBlendState(new(true,BlendFactor.SourceAlpha,
+                additive?BlendFactor.One:BlendFactor.InverseSourceAlpha,BlendEquation.Add));
+            // Both logical targets use native RGBA8 and no depth. Their alpha write
+            // masks still require separate pipeline cache entries.
+            var targets = new[] { rgbaFrame,rgbFrame,rgbaFrame,rgbFrame };
+            for (int i=0;i<targets.Length;i++)
+            {
+                backend.BindFramebuffer(targets[i]);
+                Native.shim_clear_trace();
+                backend.Draw(shader,vertices,layout,PrimitiveKind.TriangleList,0,3);
+                Equal((nuint)1,Native.shim_blend_arg(0),"blending enabled");
+                Equal((nuint)4,Native.shim_blend_arg(1),"RGB still weighted by source alpha");
+                Equal((nuint)(additive?1:5),Native.shim_blend_arg(2),"normal/additive destination factor");
+                Equal((nuint)4,Native.shim_blend_arg(3),"alpha source factor preserved");
+                Equal((nuint)(additive?1:5),Native.shim_blend_arg(4),"alpha destination factor preserved");
+                Equal((nuint)0,Native.shim_blend_arg(5),"RGB add operation");
+                Equal((nuint)0,Native.shim_blend_arg(6),"alpha add operation");
+                Equal((nuint)(i%2==0?15:14),Native.shim_blend_arg(7),"RGBA/RGB alpha write semantics");
+                if(i>=2)Check(!Trace.Contains("newRenderPipelineStateWithDescriptor:error:",StringComparison.Ordinal),"cached pipeline retains logical format write mask");
+            }
+        }
+        backend.BindFramebuffer(null);
         long before = backend.TotalSubmissions;
         backend.Draw(shader,vertices,layout,PrimitiveKind.TriangleList,0,0);
         Equal(before,backend.TotalSubmissions,"zero-count draw submits nothing");
@@ -255,6 +289,7 @@ internal static partial class Native
     [DllImport("metal_api_shim")] internal static extern int shim_draws();
     [DllImport("metal_api_shim")] internal static extern int shim_libraries();
     [DllImport("metal_api_shim")] internal static extern nuint shim_draw_arg(int index);
+    [DllImport("metal_api_shim")] internal static extern nuint shim_blend_arg(int index);
     [DllImport("metal_api_shim")] internal static extern nint shim_vertex_bytes();
     [DllImport("metal_api_shim")] internal static extern double shim_viewport(int index);
     [DllImport("metal_api_shim")] internal static extern nuint shim_scissor(int index);

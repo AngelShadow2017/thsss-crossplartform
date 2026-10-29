@@ -35,9 +35,9 @@ internal sealed unsafe class MetalShader:MetalResource,IRenderShader
         if(lib==0)throw new InvalidOperationException("Metal MSL compilation failed: "+Error(error));return lib;
     }
     internal static string TranslateToMsl(string glsl,bool vertex)=>MetalSourceCompiler.Translate(glsl,vertex);
-    internal (nint Native, bool UsesDefaultAttributes) Pipeline(VertexLayout layout,BlendState blend,nint colorFormat,nint depthFormat)
+    internal (nint Native, bool UsesDefaultAttributes) Pipeline(VertexLayout layout,BlendState blend,nint colorFormat,nint depthFormat,bool opaqueColor)
     {
-        EnsureAlive();string key=$"{layout.Stride}:{blend}:{colorFormat}:{depthFormat}:"+string.Join(";",layout.Attributes.ToArray());
+        EnsureAlive();string key=$"{layout.Stride}:{blend}:{colorFormat}:{depthFormat}:{opaqueColor}:"+string.Join(";",layout.Attributes.ToArray());
         if(_pipelines.TryGetValue(key,out var cached))return cached;
         nint d=New("MTLRenderPipelineDescriptor"),v=New("MTLVertexDescriptor");
         try
@@ -82,6 +82,9 @@ internal sealed unsafe class MetalShader:MetalResource,IRenderShader
             Call(d,"setVertexDescriptor:",v);
             nint c=Call(Call(d,"colorAttachments"),"objectAtIndexedSubscript:",0);
             Call(c,"setPixelFormat:",colorFormat);Call(c,"setBlendingEnabled:",blend.Enabled?1:0);
+            // MTLColorWriteMask RGB = 8|4|2, Alpha = 1. RGB targets discard alpha
+            // writes after blending; source alpha still weights the RGB normally.
+            Call(c,"setWriteMask:",opaqueColor?14:15);
             foreach(string channel in new[]{"RGB","Alpha"})
             {
                 Call(c,"setSource"+channel+"BlendFactor:",Factor(blend.Source));Call(c,"setDestination"+channel+"BlendFactor:",Factor(blend.Destination));

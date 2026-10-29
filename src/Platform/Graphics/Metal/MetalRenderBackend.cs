@@ -24,7 +24,8 @@ public sealed unsafe partial class MetalRenderBackend : IRenderBackend
     private Viewport _viewport=new(0,0,640,480,0,1);
     private (int X,int Y,int Width,int Height) _scissor;
     public BackendKind Kind=>BackendKind.Metal;
-    public BackendFeatures Features=>new(true,false,true,1,"msl");
+    // RGB8 uses RGBA storage with opaque alpha, including render-target writes.
+    public BackendFeatures Features=>new(true,true,true,1,"msl");
     public int PresentedFrames{get;private set;}
     public long TotalSubmissions{get;private set;}
     public byte[]? LastPresentedPixels{get;private set;}

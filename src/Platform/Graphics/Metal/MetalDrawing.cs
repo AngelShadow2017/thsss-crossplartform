@@ -19,6 +19,8 @@ public sealed unsafe partial class MetalRenderBackend
         nint descriptor=Call(objc_getClass("MTLRenderPassDescriptor"),"renderPassDescriptor");
         if(frame.Color is MetalTexture texture)
         {
+            // D3D9 X8R8G8B8 has no alpha channel. Its RGBA backing must stay opaque.
+            if (texture.Format == TextureFormat.Rgb8) color = color with { A = 1d };
             nint a=Call(Call(descriptor,"colorAttachments"),"objectAtIndexedSubscript:",0);
             Call(a,"setTexture:",texture.Native);Call(a,"setLoadAction:",(mask&ClearMask.Color)!=0?2:1);Call(a,"setStoreAction:",1);Color(a,color);
         }
@@ -50,7 +52,8 @@ public sealed unsafe partial class MetalRenderBackend
         if(((long)startVertex+vertexCount)*layout.Stride>v.SizeInBytes)throw new ArgumentException("Metal vertex draw exceeds buffer.");
         var f=DrawTarget;var t=_texture??(_fallback??=(MetalTexture)CreateTexture(1,1,TextureFormat.Rgba8,new byte[]{255,255,255,255}));
         if(ReferenceEquals(t,f.Color))throw new InvalidOperationException("Cannot sample active Metal attachment.");
-        var pipeline=s.Pipeline(layout,_blend,((MetalTexture?)f.Color)?.PixelFormat??0,f.Depth?.Texture.PixelFormat??0);
+        var pipeline=s.Pipeline(layout,_blend,((MetalTexture?)f.Color)?.PixelFormat??0,
+            f.Depth?.Texture.PixelFormat??0,f.Color?.Format==TextureFormat.Rgb8);
         nint e=BeginPass(f,0,default,1,0,out nint c);Call(e,"setRenderPipelineState:",pipeline.Native);SetViewport(e,_viewport);
         int x=_scissorEnabled?Math.Max(0,_scissor.X):0,y=_scissorEnabled?Math.Max(0,_scissor.Y):0;
         int w=_scissorEnabled?Math.Min(_scissor.Width,f.Width-x):f.Width,h=_scissorEnabled?Math.Min(_scissor.Height,f.Height-y):f.Height;
