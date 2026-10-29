@@ -72,6 +72,7 @@ public partial class Device : IDisposable
             THSSS.Graphics.BackendKind.OpenGl => new THSSS.Graphics.OpenGl.OpenGlRenderBackend(GL),
             THSSS.Graphics.BackendKind.Vulkan => new THSSS.Graphics.Vulkan.VulkanRenderBackend(
                 THSSS.Graphics.RenderBackendSelection.SurfaceSource),
+            THSSS.Graphics.BackendKind.Metal => THSSS.Graphics.MetalFactory.Create(THSSS.Graphics.RenderBackendSelection.CocoaWindow),
             _ => throw new PlatformNotSupportedException(
                 "Unsupported renderer: " + THSSS.Graphics.RenderBackendSelection.Requested),
         };

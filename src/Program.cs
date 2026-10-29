@@ -49,8 +49,14 @@ public static class Program
         options.Size = new Silk.NET.Maths.Vector2D<int>(640, 480);
         options.VSync = false;
         options.WindowBorder = WindowBorder.Resizable;
-        options.API = THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.Vulkan
-            ? GraphicsAPI.None : GraphicsAPI.Default;
+        options.API = THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.OpenGl
+            ? GraphicsAPI.Default : GraphicsAPI.None;
+        // macOS only offers forward-compatible core profiles and caps OpenGL at 4.1, so ask
+        // for 4.1 core there. Other desktops keep the default context.
+        if (OperatingSystem.IsMacOS()
+            && THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.OpenGl)
+            options.API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core,
+                ContextFlags.ForwardCompatible, new APIVersion(4, 1));
         options.PreferredDepthBufferBits = 24;
         options.PreferredStencilBufferBits = 8;
         options.Samples = new INI_RW("Setting.INI").IniReadValue("DirectX", "AntiAlias") == "1" ? 4 : 0;
@@ -88,6 +94,8 @@ public static class Program
         }
         // Resolve the native presentation handles before the game creates its device.
         var pointer = THSSS.Platform.GlfwNative.WindowPointer(_window);
+        if (THSSS.Graphics.RenderBackendSelection.Requested == THSSS.Graphics.BackendKind.Metal)
+            THSSS.Graphics.RenderBackendSelection.CocoaWindow = THSSS.Platform.GlfwNative.CocoaWindow(pointer);
         THSSS.Graphics.RenderBackendSelection.SurfaceSource =
             THSSS.Platform.GlfwNative.Resolve(pointer);
         if (Environment.GetEnvironmentVariable("THSSS_DIAG_VK") == "1")

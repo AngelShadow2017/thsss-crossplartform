@@ -91,6 +91,8 @@ for my $rid (@rids) {
         unless -f File::Spec->catfile($stage, "THSSS.dll") || -f File::Spec->catfile($stage, "THSSS") || -f File::Spec->catfile($stage, "THSSS.exe");
 
     copy_assets($stage);
+    run('sh', File::Spec->catfile($root, 'tools', 'export-metal-shaders.sh'), $stage)
+        if $rid =~ /^osx-/;
     write_setting($stage);
     write_launchers($stage, $rid);
     write_readme($stage, $rid);
@@ -239,12 +241,12 @@ sub write_launchers {
 #!/bin/sh
 # Start the game from its own directory so assets and saves resolve locally.
 cd "\$(dirname "\$0")" || exit 1
-exec "./$game" "\$@"
+exec "./$game" "\$\@"
 SH
         write_file(File::Spec->catfile($stage, 'run-config.sh'), <<"SH", 0755);
 #!/bin/sh
 cd "\$(dirname "\$0")" || exit 1
-exec "./$config" "\$@"
+exec "./$config" "\$\@"
 SH
     }
     say "    launchers written for $rid";
@@ -259,13 +261,18 @@ sub write_readme {
     my $req = $opt{'self-contained'}
         ? 'This build bundles the .NET runtime.'
         : 'Requires the .NET 8 runtime to be installed.';
+    my $platform_req = $rid =~ /^osx-/
+        ? 'Uses native Metal and AudioToolbox on macOS. Cached MSL shaders and the built-in Metal compiler require no external tools at runtime.'
+        : $is_windows
+            ? 'Requires OpenGL and XAudio2 2.9 on the system.'
+            : 'Requires OpenGL and OpenAL (for example openal-soft) on the system.';
     write_file(File::Spec->catfile($stage, 'README.txt'), <<"TXT");
 TOUHOU Hisou Sousou / 东方夏夜祭 - cross-platform port
 
 $how
 $req
 
-Requires OpenGL and OpenAL (for example openal-soft) on the system.
+$platform_req
 
 Settings live in Setting.INI next to this file. Saves (Score.dat), replays
 (Replay/) and screenshots (ScreenShot/) are created here on first use and are
