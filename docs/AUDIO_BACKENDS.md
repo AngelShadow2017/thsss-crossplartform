@@ -42,7 +42,7 @@ OpenAL套件保留162项loopback像素外音频数值断言。后端公共契约
 Windows测试使用win-x64自包含EXE和隔离Wine前缀：
 
 ```sh
-dotnet publish tests/AudioBackendCompatibility/AudioBackendCompatibility.csproj \
+dotnet publish tests/testcase/AudioBackendCompatibility/AudioBackendCompatibility.csproj \
   -r win-x64 --self-contained true -o /tmp/thsss-audio-win-test
 mkdir -p /tmp/thsss-audio-wine
 WINEPREFIX=/tmp/thsss-audio-wine \

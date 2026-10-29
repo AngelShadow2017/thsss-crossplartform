@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+<ItemGroup><ProjectReference Include="../../../src/THSSS.csproj" /></ItemGroup>
+<ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+  <Compile Include="../../../src/Platform/Graphics/Metal/MetalSourceCompiler.cs" Link="MetalSourceCompiler.cs" />
+  <Compile Include="../../../src/Platform/Graphics/Vulkan/SpirVCompiler.cs" Link="SpirVCompiler.cs" />
+</ItemGroup>
+</Project>

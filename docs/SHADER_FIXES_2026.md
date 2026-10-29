@@ -28,12 +28,12 @@
 从 `src/` 执行，使用其中global.json指定SDK8：
 
 ```sh
-dotnet run --project ../tests/ShaderAudit/ShaderAudit.csproj
-dotnet run --project ../tests/ShaderGpuAudit/ShaderGpuAudit.csproj
-dotnet run --project ../tests/GraphicsCompatibility/GraphicsCompatibility.csproj
-dotnet run --project ../tests/MatrixConventions/MatrixConventions.csproj
-dotnet run --project ../tests/EffectCompatibility/EffectCompatibility.csproj
-dotnet run --project ../tests/MeshCompatibility/MeshCompatibility.csproj
+dotnet run --project ../tests/testcase/ShaderAudit/ShaderAudit.csproj
+dotnet run --project ../tests/testcase/ShaderGpuAudit/ShaderGpuAudit.csproj
+dotnet run --project ../tests/testcase/GraphicsCompatibility/GraphicsCompatibility.csproj
+dotnet run --project ../tests/testcase/MatrixConventions/MatrixConventions.csproj
+dotnet run --project ../tests/testcase/EffectCompatibility/EffectCompatibility.csproj
+dotnet run --project ../tests/testcase/MeshCompatibility/MeshCompatibility.csproj
 ```
 
 现在 `ShaderAudit`、`ShaderGpuAudit` 是严格回归：不符合预期会抛异常/非零退出，不再是仅打印MISSING的诊断。
@@ -68,7 +68,7 @@ dotnet run --project ../tests/MeshCompatibility/MeshCompatibility.csproj
 - `ColorVertex` 默认true；Diffuse/Specular/Ambient/Emissive分别从Material/Color1/Color2选择。默认Diffuse=Color1、Specular=Color2、Ambient/Emissive=Material。关闭ColorVertex时全部使用相应材质；缺少指定顶点颜色时同样回退相应材质，不拿另一组顶点颜色顶替。
 - 支持声明中Color usageIndex=1以及FVF Specular，两组颜色独立处理packed D3DCOLOR BGRA和Float4；材质来源的Diffuse alpha决定光照结果alpha。高光仍在线性纹理调制之后相加。
 - 修正状态数字：SpecularEnable29、LocalViewer142、NormalizeNormals143、AmbientMaterialSource147、EmissiveMaterialSource148。旧AmbientMaterialSource=140会误写FogVertexMode，现已分离。
-- `tests/LightingCompatibility` 实际GPU通过110个像素断言，包括四光照分量×三来源×ColorVertex两状态×四种颜色存在组合，以及默认状态、packed/FVF、法线缩放、旋转相机和CPU逆转置参考。
+- `tests/testcase/LightingCompatibility` 实际GPU通过110个像素断言，包括四光照分量×三来源×ColorVertex两状态×四种颜色存在组合，以及默认状态、packed/FVF、法线缩放、旋转相机和CPU逆转置参考。
 
 `sh tools/run-shader-regressions.sh` 当前运行九套，全量退出码 0。
 

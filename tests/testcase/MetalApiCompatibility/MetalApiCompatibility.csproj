@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../src/Platform/Graphics/Metal/*.cs" Link="Production/%(Filename)%(Extension)" />
+    <Compile Include="../../../src/Platform/Graphics/IRenderBackend.cs" Link="Production/IRenderBackend.cs" />
+    <Compile Include="../../../src/Platform/Graphics/IRenderResources.cs" Link="Production/IRenderResources.cs" />
+    <Compile Include="../../../src/Platform/Graphics/Vulkan/SpirVCompiler.cs" Link="Production/SpirVCompiler.cs" />
+    <Compile Include="../../../src/Platform/Graphics/PresentationGeometry.cs" Link="Production/PresentationGeometry.cs" />
+  </ItemGroup>
+  <Target Name="BuildNativeShim" BeforeTargets="CoreCompile">
+    <Error Condition="!$([MSBuild]::IsOSPlatform('Linux'))" Text="The Metal API software shim requires Linux x86_64 (not a GPU test)." />
+    <MakeDir Directories="$(TargetDir)" />
+    <Exec Command="cc -std=c11 -Wall -Wextra -Werror -fPIC -shared -Wl,-z,noexecstack &quot;$(MSBuildProjectDirectory)/shim.c&quot; &quot;$(MSBuildProjectDirectory)/dispatch.S&quot; -o &quot;$(TargetDir)libmetal_api_shim.so&quot; -lm" />
+  </Target>
+</Project>

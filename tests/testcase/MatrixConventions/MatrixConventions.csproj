@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../src/Platform/Compat/Matrix.cs" Link="Matrix.cs" />
+    <Compile Include="../../../src/Platform/Compat/MathTypes.cs" Link="MathTypes.cs" />
+    <Compile Include="../../../src/Platform/Compat/WorldViewProjection.cs" Link="WorldViewProjection.cs" />
+  </ItemGroup>
+</Project>

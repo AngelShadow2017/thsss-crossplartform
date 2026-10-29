@@ -1,80 +1,36 @@
-# Behaviour suites: process orchestration, timeouts and exit codes live here.
-# Every numeric assertion stays inside the C# fixture it belongs to.
-#
+# Behaviour suites. Process, timeout and exit code come from the shared driver in
+# ../lib; every numeric assertion stays in the C# fixture it belongs to.
+load_lib thsss.exp
+
+set root [thsss_root]
+
 # A suite must print its own PASS marker. A zero exit code alone is not enough: a
 # fixture that dies before printing would otherwise look like a pass.
-
-set ::suite_root [file join /tmp thsss-dejagnu]
-
-proc repository_root {} {
-    if {![info exists ::env(THSSS_TEST_ROOT)]} {
-        error "THSSS_TEST_ROOT must point at the repository root"
-    }
-    return $::env(THSSS_TEST_ROOT)
-}
-
-proc build_command {name args} {
-    set root [repository_root]
-    set cmd [list dotnet run --project "$root/tests/$name/$name.csproj" \
-        -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false]
-    if {[llength $args] > 0} { lappend cmd -- {*}$args }
-    return $cmd
-}
-
-proc run_and_judge {label cmd marker expect_success {budget 45}} {
-    global timeout
-    set previous $timeout
-    set timeout $budget
-    set matched 0
-    spawn -noecho {*}$cmd
-    expect {
-        -re $marker { set matched 1; exp_continue }
-        eof { }
-        timeout { set timeout $previous; catch {kill -9 [exp_pid]}; catch {wait}; fail "$label (timeout)"; return }
-    }
-    set timeout $previous
-    set status [wait]
-    set signalled [expr {[llength $status] > 4 && [lindex $status 4] eq "CHILDKILLED"}]
-    set exited_ok [expr {!$signalled && [lindex $status 2] == 0 && [lindex $status 3] == 0}]
-    if {$matched && (($expect_success && $exited_ok) || (!$expect_success && !$exited_ok))} {
-        pass $label
-    } else {
-        fail "$label (marker=$matched, signal=$signalled, status=$status)"
-    }
-}
-
-proc behaviour_run {name marker args} {
-    run_and_judge $name [build_command $name {*}$args] $marker 1
-}
+#
+# Budgets differ because the fixtures differ in kind: unit fixtures finish in seconds,
+# while the windowed ones start real game processes. A budget that is too small is not
+# a passing test - it is an unfinished one.
+thsss_run ListCompatibility           [thsss_dotnet_run ListCompatibility]           {PASS: [0-9]+ legacy enumeration} 0 45
+thsss_run AudioCompatibility          [thsss_dotnet_run AudioCompatibility]          {PASS AudioCompatibility}         0 90
+thsss_run AudioBackendCompatibility   [thsss_dotnet_run AudioBackendCompatibility]   {PASS AudioBackendCompatibility}  0 90
+thsss_run ManagedDesCheck             [thsss_dotnet_run ManagedDesCheck]             {PASS ManagedDesCheck}            0 45
+thsss_run SaveCompatibility           [thsss_dotnet_run SaveCompatibility]           {PASS SaveCompatibility}          0 90
+thsss_run TextScreenshotCompatibility [thsss_dotnet_run TextScreenshotCompatibility] {PASS text: Chinese measurement}  0 90
+# This one launches two complete game processes (both keyboard modes, F8 cycle and a
+# real quit), so it needs several minutes on a loaded machine.
+thsss_run WindowInputCompatibility    [thsss_dotnet_run WindowInputCompatibility --glfw --game-smoke] {PASS WindowInputCompatibility} 0 300
+thsss_run ConfigCompatibility         [thsss_dotnet_run ConfigCompatibility]         {PASS ConfigCompatibility}        0 45
 
 # The resize fixture needs an isolated data root and runs once per renderer, so the
-# player's own Score.dat and Setting.INI are never touched.
+# player's own save files are never touched. It drives the real game loop, which needs
+# a much larger budget than the unit fixtures.
 proc resize_run {renderer} {
-    set root [repository_root]
-    set data [file join $::suite_root "[pid]-[clock seconds]" "resize-$renderer"]
-    file mkdir $data
-    foreach name {Image Model FX BGM Sound Story CS BPic} {
-        set source [file join $root game $name]
-        if {[file isdirectory $source]} { catch {file link -symbolic [file join $data $name] $source} }
-    }
-    foreach name {Setting.INI Score.dat} {
-        set source [file join $root game $name]
-        if {[file exists $source]} { file copy -force $source [file join $data $name] }
-    }
+    set data [thsss_prepare_data "resize-$renderer"]
     set env(THSSS_RENDERER) $renderer
-    run_and_judge "WindowResizeCompatibility ($renderer)" \
-        [build_command WindowResizeCompatibility $data] {PASS resize/minimize/fullscreen} 1 180
+    thsss_run "WindowResizeCompatibility ($renderer)" \
+        [thsss_dotnet_run WindowResizeCompatibility $data] \
+        {PASS resize/minimize/fullscreen} 0 180
     catch {file delete -force $data}
 }
-
-file mkdir $::suite_root
-behaviour_run ListCompatibility            {PASS: [0-9]+ legacy enumeration}      {}
-behaviour_run AudioCompatibility           {PASS AudioCompatibility}               {}
-behaviour_run AudioBackendCompatibility    {PASS AudioBackendCompatibility}       {}
-behaviour_run ManagedDesCheck              {PASS ManagedDesCheck}                 {}
-behaviour_run SaveCompatibility            {PASS SaveCompatibility}               {}
-behaviour_run TextScreenshotCompatibility  {PASS text: Chinese measurement}       {}
-behaviour_run WindowInputCompatibility     {PASS WindowInputCompatibility}        {--glfw --game-smoke}
-behaviour_run ConfigCompatibility          {PASS ConfigCompatibility}             {}
 resize_run gl
 resize_run vk
