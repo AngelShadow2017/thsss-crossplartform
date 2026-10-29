@@ -132,11 +132,12 @@ namespace System.Drawing
                     // FileFontMetrics to parse the full face, including required tables.
                     _ = candidate.FontMetrics.UnitsPerEm;
                 }
-                catch (Exception error) when (error is SixLabors.Fonts.InvalidFontFileException or SixLabors.Fonts.FontException)
+                catch (Exception error) when (error is SixLabors.Fonts.InvalidFontFileException or SixLabors.Fonts.FontException or NotSupportedException)
                 {
                     // A system catalog can contain faces this renderer cannot parse.
                     // InvalidFontFileException (including MissingFontTableException)
                     // and FontException are separate exception hierarchies in Fonts 2.x.
+                    // Its CFF parser also throws NotSupportedException for unsupported faces.
                     // Isolate that optional candidate, never a failed text draw.
                     _readableFaces.Add(key, false);
                     Console.Error.WriteLine($"[FONT] Excluding unreadable face: family={family.Name} style={style} path={path ?? "(unavailable)"}{Environment.NewLine}{error}");

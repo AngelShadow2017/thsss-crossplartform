@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../TargetFrameworks.props" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Shooting</RootNamespace>
     <AssemblyName>THSSS</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>

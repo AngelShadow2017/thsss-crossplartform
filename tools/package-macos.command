@@ -4,7 +4,7 @@ ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 for tool in dotnet perl glslangValidator spirv-cross; do
     command -v "$tool" >/dev/null || {
-        printf 'Missing build tool: %s\nInstall the .NET 10 SDK and, with Homebrew, brew install glslang spirv-cross.\n' "$tool" >&2
+        printf 'Missing build tool: %s\nInstall the .NET 8 or 10 SDK and, with Homebrew, brew install glslang spirv-cross.\n' "$tool" >&2
         exit 1
     }
 done

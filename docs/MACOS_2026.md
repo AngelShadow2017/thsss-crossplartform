@@ -23,22 +23,27 @@ Intel 对应 `osx-x64`，Apple Silicon 对应 `osx-arm64`。Metal 需要系统�
 
 ## 发布与着色器
 
-M 系列 Mac 的目标 RID 为 `osx-arm64`。构建机需要 .NET 10 SDK、Perl（macOS 系统提供）、完整 Git LFS 资源，以及 `glslangValidator`、`spirv-cross`。一次准备后用单一入口打包：
+M 系列 Mac 的目标 RID 为 `osx-arm64`。构建机需要 .NET 8 或 10 SDK、Perl（macOS 系统提供）、完整 Git LFS 资源，以及 `glslangValidator`、`spirv-cross`。一次准备后用单一入口打包：
 
 ```sh
 git lfs install
 git lfs pull
 brew install glslang spirv-cross
 sh tools/package-macos.command
+# 可选：明确指定版本，使用独立输出目录
+sh tools/package-macos.command --framework net8.0 --out dist/thsss-net8
+sh tools/package-macos.command --framework net10.0 --out dist/thsss-net10
 ```
 
-产物为 `dist/thsss-YYYYMMDD-HHMMSS/` 和同名 `.tar.gz`，包含游戏、Config、.NET 10 ARM64 运行时、只读资源、当前 `Setting.INI` 和 `MetalShaders/`。解压后双击 `run-game.command` / `run-config.command`，也可用 `sh run-game.sh` / `sh run-config.sh`。接收测试包的 Mac 无需安装 SDK、运行时或转换工具。打包不启动游戏；缺少工具或 LFS 内容时会明确失败，不把指针文件装进包里。
+默认产物为 `dist/thsss-YYYYMMDD-HHMMSS/` 和同名 `.tar.gz`，包含游戏、Config、所选 .NET ARM64 运行时、只读资源、当前 `Setting.INI` 和 `MetalShaders/`。SDK 8 默认发布 `net8.0`，SDK 10 默认发布 `net10.0`；SDK 10 也可用 `--framework net8.0` 发布 .NET 8 包，只有 SDK 8 时不会评估不支持的 .NET 10 目标。解压后双击 `run-game.command` / `run-config.command`，也可用 `sh run-game.sh` / `sh run-config.sh`。接收测试包的 Mac 无需安装 SDK、运行时或转换工具。打包不启动游戏；缺少工具或 LFS 内容时会明确失败，不把指针文件装进包里。
 
 打包入口调用 `tools/make-dist.pl --rid osx-arm64 --self-contained`，可追加 `--out dist/自定义名称`；默认每次使用新的时间戳目录，避免混入旧的运行产物。`--clean` 仅允许删除仓库 `dist/` 下已解析真实路径的子目录。已有 `Score.dat`、Replay 或 ScreenShot 内容会让复用发布目录失败。
 
 `MetalShaders/*.msl` 文件名由源代码及阶段哈希组成，避免误用过期缓存。运行时先查发布目录缓存，开发环境缺少缓存才调用转换工具；二者皆不可用时给出明确错误。缓存包含实际游戏着色器，Metal窗口呈现的小型MSL随程序内置。
 
-生产导出工具为 `tools/MetalShaderExporter/MetalShaderExporter.csproj`，直接读取游戏实际使用的 Sprite、3D 和 FX 着色器源，不解析 C# 文本或运行测试程序集。导出器按构建机 RID 运行，游戏和 Config 按发布 RID 构建。单独导出仍可运行 `sh tools/export-metal-shaders.sh 发布目录`。
+生产导出工具为 `tools/MetalShaderExporter/MetalShaderExporter.csproj`，直接读取游戏实际使用的 Sprite、3D 和 FX 着色器源，不解析 C# 文本或运行测试程序集。导出器按构建机 RID 和 SDK 对应的框架运行，游戏和 Config 按发布 RID 与 `--framework` 构建；SDK 10 交叉发布 .NET 8 包时，导出器仍在本机 .NET 10 上运行，不要求额外安装运行时 8。单独导出仍可运行 `sh tools/export-metal-shaders.sh 发布目录`。包内 `README.txt` 记录实际目标框架，复用发布目录时同时核对游戏与 Config 的 runtimeconfig，避免把两个版本混在一起。
+
+开发运行及回归入口共用 `THSSS_FRAMEWORK`，例如 `THSSS_FRAMEWORK=net8.0 sh tools/run-mac-regressions.sh`；本地执行哪个版本就需要该版本运行时。双版本配置已在 Windows 用 SDK 10 构建 net8.0 游戏、Config 和导出器，均为 0 个错误；主机跟踪确认实际加载 .NET 8.0.13。真实游戏在隔离数据目录完成菜单、进关、连续射击、Bomb、移动与 Alt+F4，退出码 0；录像记录 930 个关卡帧，其中 544 帧含射击，关卡期间 FPS 日志约 59–61。原配置和存档哈希未变。该结果不等于 SDK 8 本身或 Mac .NET 8 包已经验证；Mac 双版本打包及完整回归尚未执行。
 
 配置程序为独立 Avalonia 工程，按相同 RID 发布。“应用并启动”显式传递正在编辑的数据根，避免配置与游戏使用不同的存档目录。包不会复制开发目录里的 Score/Replay/ScreenShot。
 
@@ -66,7 +71,7 @@ Mac 对照图中的太极纹理出现大块纹素阶梯。静态路径确认 3D 
 
 Mac 实机在菜单版本号排版时曾报 MissingFontTableException（loca）。Drawing 2.1.5 的依赖下界为 Fonts 2.0.8；该版本通过 FileFontMetrics 延迟读取完整字体，TextLayout 会对全部回退字体执行 UpdatePositions，即使正文只有 ASCII。字体名称存在不能证明该字面可被解析，不能把全部系统候选直接塞入 FallbackFontFamilies。
 
-主字体和回退字体现均先读取 FontMetrics.UnitsPerEm，触发完整字面解析；仅在候选选择边界隔离 InvalidFontFileException 与 FontException，输出 `[FONT]` 的字体名、请求样式、文件路径和完整异常，再尝试其他已安装候选。Fonts 2.x 中 MissingFontTableException 继承 InvalidFontFileException，而后者直接继承 Exception，不属于 FontException 分支；只捕获 FontException 接不住缺失 loca 的错误。按字体族与请求样式缓存验证结果，避免逐帧重新解析或重复报告。回退只保留一个已经验证并含中文字形的字体族，排除主字体自身，避免重复定位；测量、换行和实际绘制共用同一选择规则。找不到任何可解析字体仍明确失败，排版和绘制异常不在此处吞掉。
+主字体和回退字体现均先读取 FontMetrics.UnitsPerEm，触发完整字面解析；仅在候选选择边界隔离 InvalidFontFileException、FontException 和解析器的 NotSupportedException，输出 `[FONT]` 的字体名、请求样式、文件路径和完整异常，再尝试其他已安装候选。Fonts 2.x 中 MissingFontTableException 继承 InvalidFontFileException，而后者直接继承 Exception，不属于 FontException 分支；只捕获 FontException 接不住缺失 loca 的错误。Windows .NET 8 实跑还发现已安装 PingFang.ttc 在 CffParser.ReadFDArray 抛出 NotSupportedException，纳入此边界后同一路径完成进关及射击。按字体族与请求样式缓存验证结果，避免逐帧重新解析或重复报告。回退只保留一个已经验证并含中文字形的字体族，排除主字体自身，避免重复定位；测量、换行和实际绘制共用同一选择规则。找不到任何可解析字体仍明确失败，排版和绘制异常不在此处吞掉。
 
 已有文字检查增加了临时缺失 loca 字体：从已安装 TrueType 字体的副本移除表标记，只写临时目录，验证元数据可读但完整解析失败的候选被排除、完整错误被保留且失败结果可复用。本轮仅静态检查，未构建、未运行该检查或进行 Mac 菜单/对话复测；GBK 和采样修复保留。
 

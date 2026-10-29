@@ -15,6 +15,7 @@
 #   perl tools/make-dist.pl                  # linux-x64, framework-dependent
 #   perl tools/make-dist.pl --self-contained # bundle the .NET runtime
 #   perl tools/make-dist.pl --rid win-x64,osx-arm64
+#   perl tools/make-dist.pl --rid osx-arm64 --framework net8.0 --self-contained
 #   perl tools/make-dist.pl --skip-build     # reuse previous publish output
 #   perl tools/make-dist.pl --out dist/thsss-0.1
 
@@ -28,6 +29,7 @@ use File::Find qw(find);
 use File::Path qw(make_path remove_tree);
 use File::Spec;
 use Getopt::Long qw(GetOptions);
+use JSON::PP qw(decode_json);
 use feature qw(say);
 use POSIX qw(strftime);
 
@@ -42,10 +44,12 @@ my @PLAYER_FILE_PATTERNS = (
 );
 
 my $root = abs_path(dirname(__FILE__) . '/..') // die "cannot resolve repository root\n";
+chdir $root or die "cannot enter repository root: $!\n";
 my %opt = (
     out          => undef,
     rid          => undef,
     configuration => 'Release',
+    framework    => $ENV{THSSS_FRAMEWORK},
     'self-contained' => 0,
     'skip-build' => 0,
     clean        => 0,
@@ -54,11 +58,18 @@ GetOptions(
     'out=s'          => \$opt{out},
     'rid=s'          => \$opt{rid},
     'configuration=s' => \$opt{configuration},
+    'framework=s'    => \$opt{framework},
     'self-contained' => \$opt{'self-contained'},
     'skip-build'     => \$opt{'skip-build'},
     'clean'          => \$opt{clean},
 ) or usage(2);
 
+my $host_framework = default_framework();
+$opt{framework} //= $host_framework;
+die "unsupported framework: $opt{framework} (use net8.0 or net10.0)\n"
+    unless $opt{framework} =~ /^net(?:8|10)\.0$/;
+die "net10.0 requires the .NET 10 SDK or newer\n"
+    if $opt{framework} eq 'net10.0' && $host_framework eq 'net8.0';
 $opt{rid} ||= default_rid();
 
 my @rids = grep { length } split /,/, $opt{rid};
@@ -108,7 +119,7 @@ if ($opt{clean}) {
 my $total = 0;
 for my $rid (@rids) {
     my $stage = @rids == 1 ? $out : File::Spec->catdir($out, $rid);
-    say "==> $rid -> $stage";
+    say "==> $rid / $opt{framework} -> $stage";
 
     die "output already exists: $stage; choose --out or use --clean for an old dist package\n"
         if -e $stage && !$opt{'skip-build'};
@@ -119,11 +130,12 @@ for my $rid (@rids) {
     die "no published output in $stage (run without --skip-build first)\n"
         unless -f File::Spec->catfile($stage, "THSSS.dll") || -f File::Spec->catfile($stage, "THSSS") || -f File::Spec->catfile($stage, "THSSS.exe");
 
+    check_framework($stage);
     copy_assets($stage);
     if ($rid =~ /^osx-/) {
         # The exporter runs for the build host, even when publishing another RID.
         run('dotnet', 'run', '--project', File::Spec->catfile($root, 'tools', 'MetalShaderExporter', 'MetalShaderExporter.csproj'),
-            '-c', 'Release', '--', File::Spec->catdir($stage, 'MetalShaders'));
+            '--framework', $host_framework, '-c', 'Release', '--', File::Spec->catdir($stage, 'MetalShaders'));
         for my $executable (qw(THSSS Config)) {
             my $path = File::Spec->catfile($stage, $executable);
             die "missing macOS executable: $path\n" unless -f $path;
@@ -156,6 +168,7 @@ usage: perl tools/make-dist.pl [options]
   --out DIR              output directory (default: dist/thsss-YYYYMMDD-HHMMSS)
   --rid LIST             comma separated runtimes (default: current platform)
   --configuration NAME   Release (default) or Debug
+  --framework TFM        net8.0 or net10.0 (default: selected SDK's version)
   --self-contained       bundle the .NET runtime with the game
   --skip-build           reuse existing bin output, do not run dotnet publish
   --clean                delete an old output subdirectory under this repo's dist/
@@ -176,6 +189,30 @@ sub default_rid {
 sub is_arm   { return $ENV{HOSTTYPE} && $ENV{HOSTTYPE} =~ /aarch64|arm64/ }
 sub is_x86   { return $ENV{HOSTTYPE} && $ENV{HOSTTYPE} =~ /x86_64/ }
 
+sub default_framework {
+    die "dotnet not found in PATH\n" unless which('dotnet');
+    open my $sdk, '-|', 'dotnet', '--version' or die "cannot query .NET SDK: $!\n";
+    my $version = <$sdk> // '';
+    close $sdk or die "dotnet --version failed\n";
+    die "unsupported .NET SDK: $version" unless $version =~ /^(\d+)\./ && $1 >= 8;
+    return $1 >= 10 ? 'net10.0' : 'net8.0';
+}
+
+sub check_framework {
+    my ($stage) = @_;
+    # In particular, --skip-build must not label an existing net10.0 package as net8.0.
+    for my $name (qw(THSSS Config)) {
+        my $path = File::Spec->catfile($stage, "$name.runtimeconfig.json");
+        open my $fh, '<', $path or die "cannot read published runtime configuration $path: $!\n";
+        local $/;
+        my $config = decode_json(<$fh>);
+        close $fh or die "cannot close $path: $!\n";
+        my $framework = $config->{runtimeOptions}{tfm} // '';
+        die "$path targets '$framework', expected '$opt{framework}'; publish into a fresh output directory\n"
+            unless $framework eq $opt{framework};
+    }
+}
+
 sub publish {
     my ($rid, $stage) = @_;
     die "dotnet not found in PATH\n" unless which('dotnet');
@@ -183,6 +220,7 @@ sub publish {
         'dotnet', 'publish',
         File::Spec->catfile($root, 'src', 'Config', 'THSSS.Config.csproj'),
         '-c', $opt{configuration},
+        '--framework', $opt{framework},
         '-r', $rid,
         ($opt{'self-contained'} ? ('--self-contained', 'true') : ()),
         '-o', $stage,
@@ -194,6 +232,7 @@ sub publish {
         'dotnet', 'publish',
         File::Spec->catfile($root, 'src', 'THSSS.csproj'),
         '-c', $opt{configuration},
+        '--framework', $opt{framework},
         '-r', $rid,
         ($opt{'self-contained'} ? ('--self-contained', 'true') : ()),
         '-o', $stage,
@@ -330,9 +369,10 @@ sub write_readme {
     my $how = $is_windows
         ? "Double-click Config.exe to change settings or run-game.bat to start directly."
         : "Run ./run-config.sh to change settings or ./run-game.sh to start directly.";
+    my ($runtime_version) = $opt{framework} =~ /^net(\d+\.\d+)$/;
     my $req = $opt{'self-contained'}
         ? 'This build bundles the .NET runtime.'
-        : 'Requires the .NET 10 runtime to be installed.';
+        : "Requires the .NET $runtime_version runtime to be installed.";
     my $platform_req = $rid =~ /^osx-/
         ? 'Uses native Metal and AudioToolbox on macOS. Cached MSL shaders and the built-in Metal compiler require no external tools at runtime.'
         : $is_windows
@@ -351,6 +391,7 @@ Settings live in Setting.INI next to this file. Saves (Score.dat), replays
 not part of this package.
 
 Built for: $rid
+Target framework: $opt{framework}
 TXT
 }
 
