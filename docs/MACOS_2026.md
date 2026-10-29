@@ -18,7 +18,7 @@ Intel 对应 `osx-x64`，Apple Silicon 对应 `osx-arm64`。Metal 需要系统�
 - 图像逻辑保持640×480；drawable按实际Framebuffer尺寸更新。离屏纹理使用与既有后端一致的行约定，呈现shader只进行一次坐标映射，保留完整画面和黑边。
 - 各次绘制使用真实Metal selector与专用结构体/浮点P/Invoke签名；提交错误转换为包含NSError的异常。每帧释放autorelease对象，显式资源销毁时解除追踪，外部深度附件不转移所有权。
 - Metal使用共享GLSL源经glslangValidator→SPIR-V→SPIRV-Cross MSL转换。游戏实际Sprite、3D、Blur/Filter/Warp均覆盖；Metal系统编译生成的MSL，不复制另一套效果公式。
-- CoreAudio接受公共层混音后的交错float32立体声块。AudioQueue回调表示系统已获取buffer，不表示声音已播放；游标与退休判断采用设备SampleTime。暂停冻结游标，Clear清队列并重新建立时间起点，Dispose同步等待回调后释放。
+- CoreAudio 接受公共层每个 voice 处理输出矩阵后的交错 float32 立体声块，以一条持续运行的 44100Hz AudioQueue 输出软件混音。不同采样率按整数相位线性插值；循环点仍由公共播放层处理。回填回调不代表已播放，游标和退休采用设备 SampleTime 与每段混音的源位置映射。Pause/Clear 只更新该 voice，Dispose 在释放回调锁后同步等待系统释放输出。
 - `AudioStreamBasicDescription`为40字节，AudioTimeStamp为64字节，AudioQueueBuffer数据指针偏移为8字节（64位ABI）。
 
 ## 发布与着色器
@@ -64,9 +64,11 @@ Metal 在 BeginFrame/EndFrame 之间按原顺序录制命令，同目标和深�
 
 `THSSS_DIAG_FPS=1` 约每秒输出一次统计。Metal 的 `submits`、`draws`、`passes`、`waitMs`、`uploadKiB` 是本统计区间的每帧平均值：draws 不包含最终呈现三角形，passes 包含呈现；waitMs 是 CPU 在提交后同步等待的墙钟耗时，不能当作纯 GPU 时间。没有 CPU 读回或已用纹理改写时，普通呈现路径应集中为一次提交；特殊同步操作可增加提交次数。
 
-## 菜单音效耗时
+## 音效重播与射击卡顿
 
-菜单每次播放选择音都会设置输出矩阵，再 Stop/Flush/Submit/Start。公共音频层在矩阵未变化时直接返回；原队列为空时只更新矩阵，不为不存在的数据重建队列。CoreAudio 的 `AudioQueueStop(..., true)` 已包含 Reset，Clear 不再额外调用一次 `AudioQueueReset`。
+`thsss-perf-20261030-000848.log` 中 Metal 始终约一次提交/帧，等待约 1–2ms；卡顿区间音频却反复出现 Pause 约 32ms、Clear 约 11ms、Start 约 10ms。frame=2162 的区间为 8.03 FPS、mainMs 124.16；按日志相邻统计区间汇总，音频操作累计约 117.81ms/帧（包括音频泵线程的日志，不能视为精确的主线程独占耗时）。灵梦等自机每三个逻辑帧请求一次射击音效，反复进入 Stop/Flush/Submit/Start；移动改变声像时旧顺序还会先重建马上要清除的 PCM。
+
+音效播放器现先 Stop/Flush，再设置新声像并 Submit/Start；不改变原版射击间隔或音效请求。CoreAudio 后端以一条持续输出队列混合各 voice，Play/Pause/Clear 不再启停原生设备队列，也不为每次重播分配原生缓冲。三个 256 帧缓冲的 PCM 合计约 17.4ms；已交给系统的混音无法逐 voice 撤回，暂停和重播仍受这段缓冲及实际设备延迟影响。软件游标在暂停时冻结，只有设备时钟经过的源采样才计为已播放。
 
 要记录实际 AudioQueue 操作耗时，在新发布目录运行：
 
@@ -74,9 +76,9 @@ Metal 在 BeginFrame/EndFrame 之间按原顺序录制命令，同目标和深�
 THSSS_DIAG_INPUT=1 THSSS_DIAG_FPS=1 sh run-game.sh
 ```
 
-`[AUDIO-TIMING]` 分别输出 Pause/Clear/Start 耗时，默认关闭。耗时包含调用期间的同步等待；不把这些日志当作整个键盘输入路径的采样。已经暂停或尚未启动的 CoreAudio 队列再次 Pause 时直接返回，避免重复进入同步 AudioQueuePause。
+`[AUDIO-TIMING]` 分别输出每个 voice 的 Pause/Clear/Start 耗时、source 编号和 transport=shared，默认关闭。`[AUDIO-OUTPUT]` 单独记录一次原生输出启动。耗时包含操作期间的锁等待，不把这些日志当作整个键盘输入路径的采样。
 
-已有 M 系列 Mac 反馈确认修正缺失属性及无引用槽 29 后能够进入关卡，但关卡只有约 7–9 FPS，输入源为英文/ABC。上述帧内录制和暂停去重是基于实机日志的本轮修改，仅在 Windows 静态检查，未构建、未打包、未运行测试或游戏，也未修改玩家数据。提交次数、顶点快照及读回同步的软件 API 驱动断言已同步更新，但尚未运行；不能宣称新实现已达到目标帧率或完成 Apple GPU 图像验证。
+已有 M 系列 Mac 反馈确认帧内录制后非射击区间可到约 60 FPS，持续射击时仍可降至约 8–25 FPS，输入源为英文/ABC。本轮据音效重播日志改为共享持续输出，仅在 Windows 静态检查，未构建、未打包、未运行测试或游戏，也未修改玩家数据。CoreAudio 软件 API 驱动已随实现更新但未运行；共享输出的实体设备听感、暂停响应和射击帧率尚待复测。
 
 ## 自动验证
 
