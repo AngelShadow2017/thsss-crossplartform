@@ -29,7 +29,8 @@ namespace System.Drawing
         private static readonly FontCollection _fonts = new();
         private static readonly object _fontLock = new();
         private static bool _systemFontsLoaded;
-        private static SixLabors.Fonts.FontFamily[] _fallbackFamilies = Array.Empty<SixLabors.Fonts.FontFamily>();
+        private static readonly Dictionary<(SixLabors.Fonts.FontFamily, SixLabors.Fonts.FontStyle), bool> _readableFaces = new();
+        private static readonly Dictionary<(SixLabors.Fonts.FontFamily, SixLabors.Fonts.FontStyle), SixLabors.Fonts.FontFamily[]> _fallbackFamilies = new();
 
         /// <summary>
         /// Map the game's Windows font names to installed CJK equivalents on
@@ -71,10 +72,6 @@ namespace System.Drawing
             {
                 if (_systemFontsLoaded) return;
                 _fonts.AddSystemFonts();
-                var fallbacks = new List<SixLabors.Fonts.FontFamily>();
-                foreach (string name in _preferredFamilies)
-                    if (_fonts.TryGet(name, out var family)) fallbacks.Add(family);
-                _fallbackFamilies = fallbacks.ToArray();
                 _systemFontsLoaded = true;
             }
         }
@@ -88,29 +85,97 @@ namespace System.Drawing
         {
             EnsureFonts();
             var size = Math.Max(1f, pixelSize);
+            var style = ToStyle(font);
 
             if (font != null && !string.IsNullOrWhiteSpace(font.Name))
             {
-                if (_fonts.TryGet(font.Name, out var exact))
-                    return exact.CreateFont(size, ToStyle(font));
+                if (_fonts.TryGet(font.Name, out var exact) && TryCreateReadableFont(exact, size, style, out var requested))
+                    return requested;
 
                 foreach (var (wanted, equivalents) in _aliases)
                 {
                     if (!string.Equals(wanted, font.Name, StringComparison.OrdinalIgnoreCase)) continue;
                     foreach (var name in equivalents)
-                        if (_fonts.TryGet(name, out var mapped))
-                            return mapped.CreateFont(size, ToStyle(font));
+                        if (_fonts.TryGet(name, out var mapped) && TryCreateReadableFont(mapped, size, style, out var replacement))
+                            return replacement;
                 }
             }
 
             foreach (var candidate in _preferredFamilies)
-                if (_fonts.TryGet(candidate, out var fallback))
-                    return fallback.CreateFont(size, ToStyle(font));
+                if (_fonts.TryGet(candidate, out var fallback) && TryCreateReadableFont(fallback, size, style, out var preferred))
+                    return preferred;
 
             foreach (var anyFamily in _fonts.Families)
-                return anyFamily.CreateFont(size, ToStyle(font));
+                if (TryCreateReadableFont(anyFamily, size, style, out var available)) return available;
 
-            throw new InvalidOperationException("No usable system font was found.");
+            throw new InvalidOperationException("No system font face readable by SixLabors.Fonts was found; see [FONT] diagnostics.");
+        }
+
+        private static bool TryCreateReadableFont(SixLabors.Fonts.FontFamily family, float size,
+            SixLabors.Fonts.FontStyle style, out SixLabors.Fonts.Font font)
+        {
+            lock (_fontLock)
+            {
+                var key = (family, style);
+                if (_readableFaces.TryGetValue(key, out bool readable))
+                {
+                    font = readable ? family.CreateFont(size, style) : null;
+                    return readable;
+                }
+
+                var candidate = family.CreateFont(size, style);
+                string path = null;
+                try
+                {
+                    candidate.TryGetPath(out path);
+                    // Name lookup/CreateFont only reads metadata. UnitsPerEm forces
+                    // FileFontMetrics to parse the full face, including required tables.
+                    _ = candidate.FontMetrics.UnitsPerEm;
+                }
+                catch (SixLabors.Fonts.FontException error)
+                {
+                    // A system catalog can contain faces this renderer cannot parse.
+                    // Isolate that optional candidate, never a failed text draw.
+                    _readableFaces.Add(key, false);
+                    Console.Error.WriteLine($"[FONT] Excluding unreadable face: family={family.Name} style={style} path={path ?? "(unavailable)"}{Environment.NewLine}{error}");
+                    font = null;
+                    return false;
+                }
+
+                _readableFaces.Add(key, true);
+                font = candidate;
+                return true;
+            }
+        }
+
+        private static SixLabors.Fonts.FontFamily[] FallbackFamilies(SixLabors.Fonts.Font primary,
+            SixLabors.Fonts.FontStyle style)
+        {
+            lock (_fontLock)
+            {
+                var key = (primary.Family, style);
+                if (_fallbackFamilies.TryGetValue(key, out var cached)) return cached;
+                foreach (string name in _preferredFamilies)
+                {
+                    if (!_fonts.TryGet(name, out var family) || family == primary.Family) continue;
+                    if (!TryCreateReadableFont(family, primary.Size, style, out var fallback)) continue;
+                    // TryGetGlyphs can return the .notdef glyph for missing text.
+                    // Test cmap coverage instead of accepting that placeholder.
+                    bool containsChinese = false;
+                    foreach (var codePoint in fallback.FontMetrics.GetAvailableCodePoints())
+                        if (codePoint.Value == 0x590F) { containsChinese = true; break; }
+                    if (!containsChinese) continue;
+
+                    // SixLabors runs positioning on every fallback, even for ASCII.
+                    // Keep one validated CJK fallback, not the whole system catalog.
+                    var selected = new[] { family };
+                    _fallbackFamilies.Add(key, selected);
+                    return selected;
+                }
+                var empty = Array.Empty<SixLabors.Fonts.FontFamily>();
+                _fallbackFamilies.Add(key, empty);
+                return empty;
+            }
         }
 
         private static SixLabors.Fonts.FontStyle ToStyle(Font font)
@@ -128,11 +193,14 @@ namespace System.Drawing
         }
 
         internal static RichTextOptions CreateTextOptions(Font font)
-            => new RichTextOptions(ResolveFont(font, PointsToPixels(font)))
+        {
+            var primary = ResolveFont(font, PointsToPixels(font));
+            return new RichTextOptions(primary)
             {
                 WrappingLength = -1f,
-                FallbackFontFamilies = _fallbackFamilies,
+                FallbackFontFamilies = FallbackFamilies(primary, ToStyle(font)),
             };
+        }
 
         private static float PointsToPixels(Font font)
         {

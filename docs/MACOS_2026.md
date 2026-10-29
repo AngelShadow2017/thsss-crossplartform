@@ -62,7 +62,13 @@ Mac 对照图中的太极纹理出现大块纹素阶梯。静态路径确认 3D 
 
 现有 Vulkan 实际 Sprite 检查增加了放大红蓝双纹素的线性插值，以及 End 恢复点采样、DoNotModifyRenderState 保留点采样的回归路径；本轮没有运行，Mac 视觉差异仍待复测。
 
-对话 A 路线的 LoadConversation2 原用 Encoding.Default；现代 .NET 将其解释为 UTF-8，而实际 Story/1-1A.csv 是 CP936，按 UTF-8 严格解码失败。现与其他原版对白路径一致，显式使用 CP936，未重编码或修改资源文件。字体选择补充已安装的 Kaiti SC/STKaiti、Songti SC/STSong、PingFang SC 等 Mac 中文字体，并将可用候选传入 SixLabors 的 FallbackFontFamilies，使测量、换行和实际绘制采用同一回退规则；不下载或全局安装字体。只完成静态检查，尚未进行 Mac 对话显示验证。
+对话 A 路线的 LoadConversation2 原用 Encoding.Default；现代 .NET 将其解释为 UTF-8，而实际 Story/1-1A.csv 是 CP936，按 UTF-8 严格解码失败。现与其他原版对白路径一致，显式使用 CP936，未重编码或修改资源文件。字体选择包含已安装的 Kaiti SC/STKaiti、Songti SC/STSong、PingFang SC 等 Mac 中文候选；不下载或全局安装字体。
+
+Mac 实机在菜单版本号排版时曾报 MissingFontTableException（loca）。Drawing 2.1.5 的依赖下界为 Fonts 2.0.8；该版本通过 FileFontMetrics 延迟读取完整字体，TextLayout 会对全部回退字体执行 UpdatePositions，即使正文只有 ASCII。字体名称存在不能证明该字面可被解析，不能把全部系统候选直接塞入 FallbackFontFamilies。
+
+主字体和回退字体现均先读取 FontMetrics.UnitsPerEm，触发完整字面解析；仅在候选选择边界隔离 FontException，输出 `[FONT]` 的字体名、请求样式、文件路径和完整异常，再尝试其他已安装候选。按字体族与请求样式缓存验证结果，避免逐帧重新解析或重复报告。回退只保留一个已经验证并含中文字形的字体族，排除主字体自身，避免重复定位；测量、换行和实际绘制共用同一选择规则。找不到任何可解析字体仍明确失败，排版和绘制异常不在此处吞掉。
+
+已有文字检查增加了临时缺失 loca 字体：从已安装 TrueType 字体的副本移除表标记，只写临时目录，验证元数据可读但完整解析失败的候选被排除、完整错误被保留且失败结果可复用。本轮仅静态检查，未构建、未运行该检查或进行 Mac 菜单/对话复测；GBK 和采样修复保留。
 
 ## 3D 输入与异常退出
 
