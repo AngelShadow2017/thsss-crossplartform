@@ -48,7 +48,7 @@ got      85-E8-13-54-0F-0A-B4-05
 expected 85-E8-13-54-0F-0A-B4-05
 ```
 
-**与平台 DES 逐字节等价**（`tests/ManagedDesCheck`，已并入行为回归）：
+**与平台 DES 逐字节等价**（`tests/testcase/ManagedDesCheck`，已并入行为回归）：
 
 - 5 个样本（空串、单字符、ASCII、中文、多行）加密结果与平台 DES 完全一致
 - 双向互解：平台密文由托管解出原文，托管密文由平台解出原文（5000 字节 + 中文）

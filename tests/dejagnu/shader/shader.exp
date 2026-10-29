@@ -11,7 +11,7 @@ proc repository_root {} {
 
 proc build_command {name {budget_root ""}} {
     set root [repository_root]
-    set project "$root/tests/$name/$name.csproj"
+    set project "$root/tests/testcase/$name/$name.csproj"
     set cmd [list dotnet run --project $project -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false]
     if {$budget_root ne ""} { lappend cmd -- $budget_root }
     return $cmd

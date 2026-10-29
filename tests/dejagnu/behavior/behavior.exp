@@ -15,7 +15,7 @@ proc repository_root {} {
 
 proc build_command {name args} {
     set root [repository_root]
-    set cmd [list dotnet run --project "$root/tests/$name/$name.csproj" \
+    set cmd [list dotnet run --project "$root/tests/testcase/$name/$name.csproj" \
         -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false]
     if {[llength $args] > 0} { lappend cmd -- {*}$args }
     return $cmd

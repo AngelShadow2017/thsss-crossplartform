@@ -10,6 +10,6 @@ done
 for renderer in gl vk; do
     cp "$ROOT/game/Setting.INI" "$DATA/Setting.INI"
     [ ! -f "$ROOT/game/Score.dat" ] || cp "$ROOT/game/Score.dat" "$DATA/Score.dat"
-    THSSS_RENDERER=$renderer dotnet run --project tests/WindowResizeCompatibility/WindowResizeCompatibility.csproj \
+    THSSS_RENDERER=$renderer dotnet run --project tests/testcase/WindowResizeCompatibility/WindowResizeCompatibility.csproj \
         -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false -- "$DATA"
 done

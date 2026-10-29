@@ -7,4 +7,4 @@ for tool in glslangValidator spirv-cross; do
     command -v "$tool" >/dev/null || { printf 'Missing build tool: %s\n' "$tool" >&2; exit 1; }
 done
 cd "$ROOT"
-dotnet run --project tests/MetalCompatibility/MetalCompatibility.csproj -- --export "$OUT/MetalShaders"
+dotnet run --project tests/testcase/MetalCompatibility/MetalCompatibility.csproj -- --export "$OUT/MetalShaders"
