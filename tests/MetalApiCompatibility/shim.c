@@ -168,6 +168,17 @@ static U integer_message(Node *o,const char *s,U a,U b,U c,U d) {
         }
         Node *v=desc->vertex;
         require(v->attributes && v->attributes->items[0] && v->layouts && v->layouts->items[30],"vertex descriptor arrays");
+        /* Metal rejects nonzero-stride layouts that no attribute references. */
+        for (U index=0;index<31;index++) {
+            Node *layout=v->layouts->items[index];
+            if (!layout || !layout->stride) continue;
+            int referenced=0;
+            for (U location=0;location<31;location++) {
+                Node *item=v->attributes->items[location];
+                if (item && item->format && item->index==index) { referenced=1; break; }
+            }
+            require(referenced,"nonzero-stride vertex buffer layout must have a referencing attribute");
+        }
         Node *attribute=v->attributes->items[0], *binding=v->layouts->items[30];
         require(attribute->format==29 && attribute->offset==0 && attribute->index==30 && binding->stride==8,"float2 vertex descriptor format/offset/slot/stride");
         require(desc->color && desc->color->items[0] && desc->color->items[0]->format==70,"RGBA pipeline color format");

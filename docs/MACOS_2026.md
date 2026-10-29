@@ -50,7 +50,7 @@ sh tools/package-macos.command
 
 ## 3D 输入与异常退出
 
-部分原版背景使用只有 Position/UV 的顶点流，而共享 3D shader 仍声明 Normal/Color/Secondary 输入。Metal 管线创建要求描述所有声明的输入，不能依赖 `uHasNormal` 等运行时开关消除描述符要求。后端用槽 29 的常量流 `(0,0,0,1)` 补足缺失属性，`stepFunction=constant`、`stepRate=0`，由 Metal 按 shader 类型截取分量，保持 GL 默认属性值语义；真实顶点流仍在槽 30，uniform 使用槽 0–28。没有修改原版背景顶点数据或关卡逻辑。
+部分原版背景使用只有 Position/UV 的顶点流，而共享 3D shader 仍声明 Normal/Color/Secondary 输入。Metal 管线创建要求描述其保留的输入，不能依赖 `uHasNormal` 等运行时开关消除描述符要求。后端用槽 29 的常量流 `(0,0,0,1)` 补足缺失属性，`stepFunction=constant`、`stepRate=0`，由 Metal 按 shader 类型截取分量，保持 GL 默认属性值语义；真实顶点流仍在槽 30，uniform 使用槽 0–28。仅当存在属性引用时才配置相应流布局：没有缺失属性的管线不配置槽 29，也不绑定常量数据。是否使用常量流与管线一起缓存，创建和绘制使用同一条件，避免无属性引用的非零 stride 布局触发原生断言。没有修改原版背景顶点数据或关卡逻辑。
 
 Silk.NET 2.23 的渲染回调抛出异常时不会复位内部 render-loop 标记，随后的窗口 Dispose 会再次抛出 Reset 异常。入口在渲染回调边界记录 `ExceptionDispatchInfo` 并结束循环，让框架正常复位标记后再传播原异常，保留原始堆栈和非零退出码。
 

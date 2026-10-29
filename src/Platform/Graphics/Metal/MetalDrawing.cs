@@ -38,8 +38,8 @@ public sealed unsafe partial class MetalRenderBackend
         if(((long)startVertex+vertexCount)*layout.Stride>v.SizeInBytes)throw new ArgumentException("Metal vertex draw exceeds buffer.");
         var f=DrawTarget;var t=_texture??(_fallback??=(MetalTexture)CreateTexture(1,1,TextureFormat.Rgba8,new byte[]{255,255,255,255}));
         if(ReferenceEquals(t,f.Color))throw new InvalidOperationException("Cannot sample active Metal attachment.");
-        nint pipeline=s.Pipeline(layout,_blend,((MetalTexture?)f.Color)?.PixelFormat??0,f.Depth?.Texture.PixelFormat??0);
-        nint e=BeginPass(f,0,default,1,0,out nint c);Call(e,"setRenderPipelineState:",pipeline);SetViewport(e,_viewport);
+        var pipeline=s.Pipeline(layout,_blend,((MetalTexture?)f.Color)?.PixelFormat??0,f.Depth?.Texture.PixelFormat??0);
+        nint e=BeginPass(f,0,default,1,0,out nint c);Call(e,"setRenderPipelineState:",pipeline.Native);SetViewport(e,_viewport);
         int x=_scissorEnabled?Math.Max(0,_scissor.X):0,y=_scissorEnabled?Math.Max(0,_scissor.Y):0;
         int w=_scissorEnabled?Math.Min(_scissor.Width,f.Width-x):f.Width,h=_scissorEnabled?Math.Min(_scissor.Height,f.Height-y):f.Height;
         if(w<=0||h<=0){Call(e,"endEncoding");Complete(c);return;}
@@ -52,9 +52,12 @@ public sealed unsafe partial class MetalRenderBackend
             finally{Release(d);}
         }
         Call(e,"setDepthStencilState:",state);Call(e,"setVertexBuffer:offset:atIndex:",v.Native,0,30);
-        ReadOnlySpan<float> defaultAttribute = stackalloc float[] { 0f, 0f, 0f, 1f };
-        fixed (float* values = defaultAttribute)
-            Call(e, "setVertexBytes:length:atIndex:", (nint)values, 4 * sizeof(float), MetalShader.DefaultAttributeBufferIndex);
+        if (pipeline.UsesDefaultAttributes)
+        {
+            ReadOnlySpan<float> defaultAttribute = stackalloc float[] { 0f, 0f, 0f, 1f };
+            fixed (float* values = defaultAttribute)
+                Call(e, "setVertexBytes:length:atIndex:", (nint)values, 4 * sizeof(float), MetalShader.DefaultAttributeBufferIndex);
+        }
         foreach(var b in _uniforms)fixed(byte*p=b.Value){Call(e,"setVertexBytes:length:atIndex:",(nint)p,b.Value.Length,b.Key);Call(e,"setFragmentBytes:length:atIndex:",(nint)p,b.Value.Length,b.Key);}
         Call(e,"setFragmentTexture:atIndex:",t.Native,1);Call(e,"setFragmentSamplerState:atIndex:",Sampler(_sampling??t.Sampling),1);
         Call(e,"drawPrimitives:vertexStart:vertexCount:",kind switch{PrimitiveKind.TriangleList=>3,PrimitiveKind.TriangleStrip=>4,PrimitiveKind.LineList=>1,_=>throw new ArgumentOutOfRangeException(nameof(kind))},startVertex,vertexCount);
