@@ -9,3 +9,6 @@
 
 # Distribution packages built by tools/make-dist.pl
 /dist/
+
+**/*/Source.dat
+**/*/*.rpy

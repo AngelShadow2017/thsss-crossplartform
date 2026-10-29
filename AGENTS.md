@@ -11,4 +11,3 @@
 - 从根运行 `sh tools/run-game.sh`；SDK唯一配置是根 `global.json`。回归入口为 `tools/run-shader-regressions.sh`、`tools/run-behavior-regressions.sh`、`tools/run-audio-regressions.sh`、`tools/run-resize-regressions.sh`。
 - C# 测试在 `tests/`，DejaGnu 驱动在 `tests/dejagnu/`；测试必须使用临时数据。
 - 当前状态与约定集中在 `docs/`，`docs/README.md` 是索引。只保留有效内容，不保留修复前快照。
-- 不因目录整理或版本控制噪声删除/恢复既有数据变化；特别保留 `game/CS/`、`game/Score.dat`、`game/Setting.INI` 与录像。
