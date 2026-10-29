@@ -106,12 +106,14 @@ namespace SlimDX
         {
             float yScale = 1.0f / (float)Math.Tan(fov / 2.0f);
             float xScale = yScale / aspect;
-            var m = new Matrix();
-            m.M11 = xScale;
-            m.M22 = yScale;
-            m.M33 = zfar / (zfar - znear);
-            m.M34 = 1.0f;
-            m.M43 = -znear * zfar / (zfar - znear);
+            var m = new Matrix
+            {
+                M11 = xScale,
+                M22 = yScale,
+                M33 = zfar / (zfar - znear),
+                M34 = 1.0f,
+                M43 = -znear * zfar / (zfar - znear)
+            };
             return m;
         }
 
@@ -119,47 +121,55 @@ namespace SlimDX
         {
             float yScale = 1.0f / (float)Math.Tan(fov / 2.0f);
             float xScale = yScale / aspect;
-            var m = new Matrix();
-            m.M11 = xScale;
-            m.M22 = yScale;
-            m.M33 = zfar / (znear - zfar);
-            m.M34 = -1.0f;
-            m.M43 = znear * zfar / (znear - zfar);
+            var m = new Matrix
+            {
+                M11 = xScale,
+                M22 = yScale,
+                M33 = zfar / (znear - zfar),
+                M34 = -1.0f,
+                M43 = znear * zfar / (znear - zfar)
+            };
             return m;
         }
 
         public static Matrix OrthoLH(float width, float height, float znear, float zfar)
         {
-            var m = new Matrix();
-            m.M11 = 2.0f / width;
-            m.M22 = 2.0f / height;
-            m.M33 = 1.0f / (zfar - znear);
-            m.M43 = -znear / (zfar - znear);
-            m.M44 = 1.0f;
+            var m = new Matrix
+            {
+                M11 = 2.0f / width,
+                M22 = 2.0f / height,
+                M33 = 1.0f / (zfar - znear),
+                M43 = -znear / (zfar - znear),
+                M44 = 1.0f
+            };
             return m;
         }
 
         public static Matrix OrthoRH(float width, float height, float znear, float zfar)
         {
-            var m = new Matrix();
-            m.M11 = 2.0f / width;
-            m.M22 = 2.0f / height;
-            m.M33 = -1.0f / (zfar - znear);
-            m.M43 = -znear / (zfar - znear);
-            m.M44 = 1.0f;
+            var m = new Matrix
+            {
+                M11 = 2.0f / width,
+                M22 = 2.0f / height,
+                M33 = -1.0f / (zfar - znear),
+                M43 = -znear / (zfar - znear),
+                M44 = 1.0f
+            };
             return m;
         }
 
         public static Matrix OrthoOffCenterLH(float left, float right, float bottom, float top, float znear, float zfar)
         {
-            var m = new Matrix();
-            m.M11 = 2.0f / (right - left);
-            m.M22 = 2.0f / (top - bottom);
-            m.M33 = 1.0f / (zfar - znear);
-            m.M41 = -(right + left) / (right - left);
-            m.M42 = -(top + bottom) / (top - bottom);
-            m.M43 = -znear / (zfar - znear);
-            m.M44 = 1.0f;
+            var m = new Matrix
+            {
+                M11 = 2.0f / (right - left),
+                M22 = 2.0f / (top - bottom),
+                M33 = 1.0f / (zfar - znear),
+                M41 = -(right + left) / (right - left),
+                M42 = -(top + bottom) / (top - bottom),
+                M43 = -znear / (zfar - znear),
+                M44 = 1.0f
+            };
             return m;
         }
 
