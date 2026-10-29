@@ -1,12 +1,10 @@
 #!/bin/sh
+# Behaviour suites driven by DejaGnu. Set THSSS_TEST_REPORT_DIR to keep audio.sum/audio.log.
 set -eu
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-cd "$ROOT/src"
-for suite in ListCompatibility AudioCompatibility SaveCompatibility TextScreenshotCompatibility WindowInputCompatibility ConfigCompatibility; do
-    printf '\n=== %s ===\n' "$suite"
-    if [ "$suite" = WindowInputCompatibility ]; then
-        dotnet run --project "../tests/$suite/$suite.csproj" -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false -- --glfw --game-smoke
-    else
-        dotnet run --project "../tests/$suite/$suite.csproj" -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false
-    fi
-done
+export THSSS_TEST_ROOT="$ROOT"
+REPORT=${THSSS_TEST_REPORT_DIR:-$(mktemp -d)}
+mkdir -p "$REPORT"
+printf 'DejaGnu reports: %s\n' "$REPORT"
+cd "$ROOT"
+runtest --tool behavior --srcdir "$ROOT/tests/dejagnu/behavior" --outdir "$REPORT"

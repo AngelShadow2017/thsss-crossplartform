@@ -1,0 +1,72 @@
+# Rendering suites. Same contract as behavior.exp: process, timeout and exit code are
+# handled here; every pixel assertion stays in its C# fixture, and a suite must print
+# its own PASS marker so a crash before printing cannot look like a pass.
+
+proc repository_root {} {
+    if {![info exists ::env(THSSS_TEST_ROOT)]} {
+        error "THSSS_TEST_ROOT must point at the repository root"
+    }
+    return $::env(THSSS_TEST_ROOT)
+}
+
+proc build_command {name {budget_root ""}} {
+    set root [repository_root]
+    set project "$root/tests/$name/$name.csproj"
+    set cmd [list dotnet run --project $project -p:WarningLevel=0 -p:GenerateResourceWarnOnBinaryFormatterUse=false]
+    if {$budget_root ne ""} { lappend cmd -- $budget_root }
+    return $cmd
+}
+
+proc run_and_judge {label cmd marker {budget 240} {data_root ""}} {
+    global timeout
+    # Several fixtures address game assets with paths relative to the game project
+    # (for example "../game/FX/Blur.fx"), so run them from that directory.
+    cd [file join [repository_root] src]
+    set previous $timeout
+    set timeout $budget
+    set matched 0
+    spawn -noecho {*}$cmd
+    expect {
+        -re $marker { set matched 1; exp_continue }
+        eof { }
+        timeout { set timeout $previous; catch {kill -9 [exp_pid]}; catch {wait}; fail "$label (timeout)"; return }
+    }
+    set timeout $previous
+    set status [wait]
+    set signalled [expr {[llength $status] > 4 && [lindex $status 4] eq "CHILDKILLED"}]
+    set exited_ok [expr {!$signalled && [lindex $status 2] == 0 && [lindex $status 3] == 0}]
+    if {$matched && $exited_ok} { pass $label } else {
+        fail "$label (marker=$matched, signal=$signalled, status=$status)"
+    }
+}
+
+# Isolated data root so no fixture reads or writes the player's own save files.
+proc prepare_data {label} {
+    set root [repository_root]
+    set data [file join $root .dejagnu-data $label]
+    file delete -force $data
+    file mkdir $data
+    foreach name {Image Model FX BGM Sound Story CS BPic} {
+        set source [file join $root game $name]
+        if {[file isdirectory $source]} { catch {file link -symbolic [file join $data $name] $source} }
+    }
+    foreach name {Setting.INI Score.dat} {
+        set source [file join $root game $name]
+        if {[file exists $source]} { file copy -force $source [file join $data $name] }
+    }
+    return $data
+}
+
+set root [repository_root]
+set env(ALSOFT_DRIVERS) null
+
+# Markers come from each fixture's own final print, so "PASS any line" is not enough.
+run_and_judge VulkanBackend         [build_command VulkanBackend]         {PASS VulkanBackend}                 240
+run_and_judge ShaderAudit           [build_command ShaderAudit]           {PASS: }                             240
+run_and_judge ShaderGpuAudit        [build_command ShaderGpuAudit]        {PASS: former shader audit defects}  240
+run_and_judge GraphicsCompatibility [build_command GraphicsCompatibility] {PASS: texture row orientation}      240
+run_and_judge MatrixConventions     [build_command MatrixConventions]     {PASS: stage camera target/origin}   240
+run_and_judge MathCompatibility     [build_command MathCompatibility]     {PASS: GL upload}                    240
+run_and_judge EffectCompatibility   [build_command EffectCompatibility]   {PASS API: sources}                  240
+run_and_judge MeshCompatibility     [build_command MeshCompatibility]     {PASS: }                             240
+run_and_judge LightingCompatibility [build_command LightingCompatibility] {PASS: [0-9]+ lighting state}        240

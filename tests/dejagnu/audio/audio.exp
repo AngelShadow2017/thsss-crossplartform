@@ -1,0 +1,31 @@
+# Process orchestration only; numeric audio assertions live in the C# fixtures.
+set timeout 45
+proc audio_run {label command marker {expect_failure 0}} {
+    global timeout
+    set old_timeout $timeout
+    spawn -noecho {*}$command
+    set matched 0
+    expect {
+        -re $marker { set matched 1; exp_continue }
+        eof { }
+        timeout { fail "$label (timeout)"; catch {close}; catch {wait}; return }
+    }
+    set status [wait]
+    set signaled [expr {[llength $status] > 4 && [lindex $status 4] == "CHILDKILLED"}]
+    set exited_ok [expr {!$signaled && [lindex $status 2] == 0 && [lindex $status 3] == 0}]
+    if {$matched && (($expect_failure && !$exited_ok) || (!$expect_failure && $exited_ok))} {
+        pass $label
+    } else {
+        fail "$label (marker=$matched, status=$status)"
+    }
+}
+if {![info exists env(THSSS_AUDIO_TEST_DLL)]} {
+    error "THSSS_AUDIO_TEST_DLL must name the built backend-neutral test DLL"
+}
+audio_run "OpenAL shared audio contract" [list env THSSS_AUDIO_BACKEND=openal ALSOFT_DRIVERS=null dotnet $env(THSSS_AUDIO_TEST_DLL)] {PASS AudioBackendCompatibility:}
+audio_run "Invalid backend fails explicitly without fallback" [list env THSSS_AUDIO_BACKEND=invalid dotnet $env(THSSS_AUDIO_TEST_DLL) --selection-probe] {ArgumentException: Unknown THSSS_AUDIO_BACKEND} 1
+audio_run "Windows native backend rejected on Linux" [list env THSSS_AUDIO_BACKEND=xaudio2 dotnet $env(THSSS_AUDIO_TEST_DLL) --selection-probe] {PlatformNotSupportedException:.*requires Windows} 1
+if {[info exists env(THSSS_AUDIO_WINE_EXE)]} {
+    if {![info exists env(WINEPREFIX)]} {error "Set an isolated WINEPREFIX for the Wine test"}
+    audio_run "Windows XAudio2 shared contract under Wine" [list env THSSS_AUDIO_BACKEND=xaudio2 WINEDEBUG=-all wine $env(THSSS_AUDIO_WINE_EXE)] {PASS AudioBackendCompatibility:}
+}

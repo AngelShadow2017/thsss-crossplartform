@@ -1,8 +1,10 @@
 #!/bin/sh
+# Rendering suites driven by DejaGnu. Set THSSS_TEST_REPORT_DIR to keep shader.sum/shader.log.
 set -eu
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-cd "$ROOT/src"
-for suite in VulkanBackend ShaderAudit ShaderGpuAudit GraphicsCompatibility MatrixConventions MathCompatibility EffectCompatibility MeshCompatibility LightingCompatibility; do
-    printf '\n=== %s ===\n' "$suite"
-    dotnet run --project "../tests/$suite/$suite.csproj" "$@"
-done
+export THSSS_TEST_ROOT="$ROOT"
+REPORT=${THSSS_TEST_REPORT_DIR:-$(mktemp -d)}
+mkdir -p "$REPORT"
+printf 'DejaGnu reports: %s\n' "$REPORT"
+cd "$ROOT"
+runtest --tool shader --srcdir "$ROOT/tests/dejagnu/shader" --outdir "$REPORT"
