@@ -89,7 +89,11 @@ internal sealed unsafe class CoreAudioBackend:IAudioBackend
         {
             Alive();
             long start = TraceInput ? Stopwatch.GetTimestamp() : 0;
-            lock(_sync)Played();
+            lock(_sync)
+            {
+                if (!_playing) return;
+                Played();
+            }
             Check(AudioQueuePause(_queue),"Pause");
             lock(_sync){Played();_playing=false;}
             TraceTiming("Pause", start);

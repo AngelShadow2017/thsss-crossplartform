@@ -54,6 +54,16 @@ sh tools/package-macos.command
 
 Silk.NET 2.23 的渲染回调抛出异常时不会复位内部 render-loop 标记，随后的窗口 Dispose 会再次抛出 Reset 异常。入口在渲染回调边界记录 `ExceptionDispatchInfo` 并结束循环，让框架正常复位标记后再传播原异常，保留原始堆栈和非零退出码。
 
+## 帧内录制与同步
+
+M 系列 Mac 的实机记录 `thsss-perf-20261029-233645.log` 显示前段约 60 FPS、mainMs 约 16ms，进入关卡后降至 7.12 FPS、mainMs 139.54ms。另一进程的 `thsss-sample-20261029-233900.txt` 中，主线程 3663 个调用栈样本有 2951 个处于 `waitUntilCompleted`，约 80.6%。这是主线程采样中的等待占比，不是 CPU 利用率或 GPU 执行时长。音频 Pause/Stop 也有同步等待，但 Metal 逐次提交和等待是该采样的主要热点。
+
+Metal 在 BeginFrame/EndFrame 之间按原顺序录制命令，同目标和深度附件的连续绘制复用 render encoder，在呈现或 EndFrame 集中提交并等待。目标、深度附件或清屏操作需要新的 pass，但不为每次 Sprite/3D Draw 单独提交。没有 BeginFrame 的独立 API 调用保留立即完成的语义。
+
+每次录制的 Draw 使用独立顶点快照，写入可复用的共享上传页；页内区域只有在提交完成后才能复用，不能继续把反复改写的 Sprite VBO 直接交给延迟执行的 GPU。uniform 使用 Metal setBytes 的复制语义。CPU 读回、改写待提交命令已经使用的纹理或调整 framebuffer 尺寸时先同步；新建且尚未使用的纹理上传不会无条件拆分命令。命令缓冲使用默认保留资源引用的创建方式。
+
+`THSSS_DIAG_FPS=1` 约每秒输出一次统计。Metal 的 `submits`、`draws`、`passes`、`waitMs`、`uploadKiB` 是本统计区间的每帧平均值：draws 不包含最终呈现三角形，passes 包含呈现；waitMs 是 CPU 在提交后同步等待的墙钟耗时，不能当作纯 GPU 时间。没有 CPU 读回或已用纹理改写时，普通呈现路径应集中为一次提交；特殊同步操作可增加提交次数。
+
 ## 菜单音效耗时
 
 菜单每次播放选择音都会设置输出矩阵，再 Stop/Flush/Submit/Start。公共音频层在矩阵未变化时直接返回；原队列为空时只更新矩阵，不为不存在的数据重建队列。CoreAudio 的 `AudioQueueStop(..., true)` 已包含 Reset，Clear 不再额外调用一次 `AudioQueueReset`。
@@ -64,9 +74,9 @@ Silk.NET 2.23 的渲染回调抛出异常时不会复位内部 render-loop 标�
 THSSS_DIAG_INPUT=1 THSSS_DIAG_FPS=1 sh run-game.sh
 ```
 
-`[AUDIO-TIMING]` 分别输出 Pause/Clear/Start 耗时，默认关闭。耗时包含调用期间的同步等待；不把这些日志当作整个键盘输入路径的采样。
+`[AUDIO-TIMING]` 分别输出 Pause/Clear/Start 耗时，默认关闭。耗时包含调用期间的同步等待；不把这些日志当作整个键盘输入路径的采样。已经暂停或尚未启动的 CoreAudio 队列再次 Pause 时直接返回，避免重复进入同步 AudioQueuePause。
 
-已有 M 系列 Mac 实机反馈确认菜单可进入、菜单移动会卡顿、进关时因缺少 `aNormal` 顶点描述而崩溃；输入源为英文/ABC。本次针对这些反馈仅在 Windows 静态分析和修改，未构建、未打包、未运行测试或游戏，也未修改玩家数据。进关修复和菜单音效优化均需 Mac 复测，不能宣称卡顿已消失或达到目标帧率。Metal 后端原有的每次绘制同步等待仍保留。
+已有 M 系列 Mac 反馈确认修正缺失属性及无引用槽 29 后能够进入关卡，但关卡只有约 7–9 FPS，输入源为英文/ABC。上述帧内录制和暂停去重是基于实机日志的本轮修改，仅在 Windows 静态检查，未构建、未打包、未运行测试或游戏，也未修改玩家数据。提交次数、顶点快照及读回同步的软件 API 驱动断言已同步更新，但尚未运行；不能宣称新实现已达到目标帧率或完成 Apple GPU 图像验证。
 
 ## 自动验证
 

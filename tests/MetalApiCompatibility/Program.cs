@@ -91,11 +91,19 @@ internal static class Program
         backend.SetViewport(1,2,6,5,0.25f,0.75f);
         backend.SetScissor(true,2,1,3,4);
         backend.SetUniformBlock(0,null,new byte[16]);
+        Native.shim_clear_trace();
         backend.BeginFrame();
         Throws<InvalidOperationException>(()=>backend.BeginFrame(),"nested frame rejected");
         backend.Clear(ClearMask.Color,0,0,1,1,1,0);
-        Native.shim_clear_trace();
         backend.Draw(shader,vertices,layout,PrimitiveKind.TriangleList,0,3);
+        Equal(0L, backend.TotalSubmissions, "frame clear and draw do not submit separately");
+        Equal(1, backend.FramePasses, "clear and same-target draw share an encoder");
+        Check(!Trace.Contains("waitUntilCompleted\n", StringComparison.Ordinal), "no per-draw GPU wait inside frame");
+        vertices.Update(new byte[bytes.Length], 0);
+        byte[] snapshot = new byte[bytes.Length];
+        Marshal.Copy(Native.shim_vertex_bytes(), snapshot, 0, snapshot.Length);
+        Bytes(bytes, snapshot, "recorded draw owns a vertex snapshot before source reuse");
+        vertices.Update(bytes, 0);
         Equal(1,Native.shim_draws(),"native draw reached");
         Equal((nuint)3,Native.shim_draw_arg(0),"Metal triangle primitive enum");
         Equal((nuint)0,Native.shim_draw_arg(1),"draw vertex start");
@@ -105,9 +113,10 @@ internal static class Program
         for(int i=0;i<6;i++) Equal(expectedViewport[i],Native.shim_viewport(i),$"viewport ABI component {i}");
         nuint[] expectedScissor = {2,1,3,4};
         for(int i=0;i<4;i++) Equal(expectedScissor[i],Native.shim_scissor(i),$"scissor ABI component {i}");
-        Ordered("newRenderPipelineStateWithDescriptor:error:","commandBuffer","setRenderPipelineState:","setViewport:","setScissorRect:","setVertexBuffer:offset:atIndex:","setVertexBytes:length:atIndex:","setFragmentBytes:length:atIndex:","drawPrimitives:vertexStart:vertexCount:","endEncoding","commit","waitUntilCompleted","status");
         // The shim records draws, not shader execution. Only clear pixels are asserted.
         Bytes(new byte[] {0,0,255,255},backend.ReadPixels(0,0,1,1),"draw load action preserves prior clear");
+        Equal(1, backend.FrameSubmissions, "readback flushes the recorded commands once");
+        Ordered("commandBuffer","renderCommandEncoderWithDescriptor:","newRenderPipelineStateWithDescriptor:error:","setRenderPipelineState:","setViewport:","setScissorRect:","setVertexBuffer:offset:atIndex:","setVertexBytes:length:atIndex:","setFragmentBytes:length:atIndex:","drawPrimitives:vertexStart:vertexCount:","endEncoding","commit","waitUntilCompleted","status","getBytes:bytesPerRow:fromRegion:mipmapLevel:");
         Native.shim_clear_trace();
         backend.Draw(shader,vertices,layout,PrimitiveKind.TriangleList,1,3);
         Check(!Trace.Contains("newRenderPipelineStateWithDescriptor:error:",StringComparison.Ordinal),"pipeline cache reused");
@@ -121,7 +130,9 @@ internal static class Program
         Equal(draws,Native.shim_draws(),"empty scissor suppresses draw");
         backend.Present();
         Equal(0,backend.PresentedFrames,"headless present does not claim drawable presentation");
+        Equal(2,backend.FrameSubmissions,"readback and headless frame end are the only submissions");
         backend.BeginFrame(); backend.EndFrame();
+        Equal(0,backend.FrameSubmissions,"empty frame submits nothing");
         backend.Resize(3,2);
         backend.Clear(ClearMask.Color,1,0,1,1,1,0);
         Equal(24,backend.ReadPixels(0,0,3,2).Length,"resized default target");
@@ -244,6 +255,7 @@ internal static partial class Native
     [DllImport("metal_api_shim")] internal static extern int shim_draws();
     [DllImport("metal_api_shim")] internal static extern int shim_libraries();
     [DllImport("metal_api_shim")] internal static extern nuint shim_draw_arg(int index);
+    [DllImport("metal_api_shim")] internal static extern nint shim_vertex_bytes();
     [DllImport("metal_api_shim")] internal static extern double shim_viewport(int index);
     [DllImport("metal_api_shim")] internal static extern nuint shim_scissor(int index);
     [DllImport("metal_api_shim")] internal static extern double shim_depth();

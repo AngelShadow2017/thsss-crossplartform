@@ -25,6 +25,8 @@ static char trace[262144];
 static size_t trace_length;
 static int live, failures, draws, libraries, fail_command;
 static U draw_start,draw_count,draw_kind,vertex_index;
+static Node *last_vertex_buffer;
+static U last_vertex_offset;
 static Viewport viewport;
 static Scissor scissor;
 static double clear_depth;
@@ -58,6 +60,7 @@ int shim_failures(void) { return failures; }
 int shim_draws(void) { return draws; }
 int shim_libraries(void) { return libraries; }
 U shim_draw_arg(int i) { return i==0?draw_kind:i==1?draw_start:i==2?draw_count:vertex_index; }
+const void *shim_vertex_bytes(void) { require(last_vertex_buffer!=NULL,"bound vertex snapshot"); return last_vertex_buffer->bytes+last_vertex_offset; }
 double shim_viewport(int i) { const double *p=(const double *)&viewport; return p[i]; }
 U shim_scissor(int i) { const U *p=(const U *)&scissor; return p[i]; }
 double shim_depth(void) { return clear_depth; }
@@ -130,7 +133,7 @@ static U integer_message(Node *o,const char *s,U a,U b,U c,U d) {
     }
     if (!strcmp(s,"commandBuffer")) return (U)node("command",0);
     if (!strcmp(s,"renderCommandEncoderWithDescriptor:")) {
-        require(o->phase==0,"encoder before commit"); Node *n=node("encoder",0); n->command=o; n->pass=(Node *)a; o->phase=1;
+        require(o->phase==0 || o->phase==2,"encoder before commit, after prior encoder ends"); Node *n=node("encoder",0); n->command=o; n->pass=(Node *)a; o->phase=1;
         Node *color=n->pass->color?n->pass->color->items[0]:NULL;
         if (color && color->texture && color->load==2) {
             Node *t=color->texture; Color v=color->clear;
@@ -187,7 +190,9 @@ static U integer_message(Node *o,const char *s,U a,U b,U c,U d) {
     if (!strcmp(s,"newDepthStencilStateWithDescriptor:") || !strcmp(s,"newSamplerStateWithDescriptor:")) { require(a!=0,"state descriptor"); return (U)node("state",1); }
     if (!strcmp(s,"setRenderPipelineState:")) { o->pipeline=(Node *)a; return 0; }
     if (!strcmp(s,"setVertexBuffer:offset:atIndex:")) {
-        require(a && b==0 && c==30,"vertex buffer slot/offset ABI"); o->vertex=(Node *)a; vertex_index=c; return 0;
+        require(a && c==30 && b<((Node *)a)->length,"vertex buffer slot/offset ABI");
+        o->vertex=(Node *)a; o->offset=b; vertex_index=c;
+        last_vertex_buffer=o->vertex; last_vertex_offset=b; return 0;
     }
     if (!strcmp(s,"setVertexBytes:length:atIndex:") || !strcmp(s,"setFragmentBytes:length:atIndex:")) { require(a && b>0 && c<30,"uniform bytes ABI"); return 0; }
     if (!strcmp(s,"setFragmentTexture:atIndex:")) {
@@ -201,7 +206,7 @@ static U integer_message(Node *o,const char *s,U a,U b,U c,U d) {
             present_source=o->texture; draws++; return 0;
         }
         require(o->command && o->command->phase==1 && o->pipeline && o->vertex,"draw requires active encoder/pipeline/vertices");
-        require(a==3 && c==3 && o->vertex->length>=24,"fixture triangle draw arguments");
+        require(a==3 && c==3 && o->offset+(b+c)*8<=o->vertex->length,"fixture triangle draw arguments");
         draws++; draw_kind=a; draw_start=b; draw_count=c; return 0;
     }
     static const char *setters[]={"setTextureType:","setUsage:","setStorageMode:","setStoreAction:","setClearStencil:","setFormat:","setStepFunction:","setVertexFunction:","setFragmentFunction:","setVertexDescriptor:","setBlendingEnabled:","setSourceRGBBlendFactor:","setSourceAlphaBlendFactor:","setDestinationRGBBlendFactor:","setDestinationAlphaBlendFactor:","setRgbBlendOperation:","setAlphaBlendOperation:","setDepthAttachmentPixelFormat:","setStencilAttachmentPixelFormat:","setCullMode:","setFrontFacingWinding:","setDepthCompareFunction:","setDepthWriteEnabled:","setDepthStencilState:","setFragmentTexture:atIndex:","setFragmentSamplerState:atIndex:","setSAddressMode:","setTAddressMode:","setMinFilter:","setMagFilter:","setMipFilter:","setMaxAnisotropy:"};

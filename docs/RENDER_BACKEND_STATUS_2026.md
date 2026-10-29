@@ -21,6 +21,8 @@ Sprite 在 Draw 时将当前变换写入齐次顶点，同纹理的旋转/缩放
 
 Metal直接调用系统框架，不经MoltenVK；MSL由同一份GLSL转译。发布包预存MSL后不需要运行时转换工具；开发环境可用glslangValidator与spirv-cross。Vulkan当前仍需要glslangValidator运行时转换，不能把Metal缓存描述套用到Vulkan。
 
+Mac 实机采样中主线程约 80.6% 的样本停在 Metal `waitUntilCompleted`，对应旧实现逐次 Draw/Clear 提交并等待的路径。Metal 现改为帧内录制、相同目标和深度的 encoder 复用、顶点上传快照，以及呈现/帧结束集中提交；CPU 读回、已用纹理更新和尺寸变化仍先同步。本轮仅静态修改，尚无优化后帧率或画面验证结果。
+
 ## 状态与资源
 
 - Device状态更新与是否存在GL上下文无关，所有非GL后端也必须收到混合、深度写入与光照设置。
@@ -42,4 +44,4 @@ sh tools/run-mac-regressions.sh
 
 Linux原生Wayland及X11的GL/Vulkan窗口实际运行通过；Vulkan菜单稳定阶段约60FPS、1提交/帧，关卡可暂停/恢复/退出。VK/GL菜单中心RGB均为(166,188,243)，非锁帧动画截图的整幅每通道平均绝对差小于1，不能证明所有场景逐像素一致。Mac没有把GPU加速当作API验证前提，但Apple系统运行、实体设备性能和完整关卡听感未由软件驱动证明。
 
-诊断：`THSSS_DIAG_FPS=1`输出实际FPS与Vulkan提交数；读回诊断会额外同步，测性能时不要开启THSSS_DIAG_PRESENT或THSSS_DIAG_VK_PIXELS。
+诊断：`THSSS_DIAG_FPS=1` 约每秒输出实际 FPS、mainMs 和 renderer；Vulkan 保留当前帧提交/绘制数，Metal 输出区间内每帧平均 submits/draws/passes/waitMs/uploadKiB。waitMs 代表 CPU 同步等待，非纯 GPU 时间。读回诊断会额外同步，测性能时不要开启 THSSS_DIAG_PRESENT 或 THSSS_DIAG_VK_PIXELS。

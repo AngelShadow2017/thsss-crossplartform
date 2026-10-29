@@ -74,13 +74,28 @@ public sealed unsafe partial class MetalRenderBackend : IRenderBackend
     {
         CheckAlive();if(framebufferWidth<=0||framebufferHeight<=0)throw new ArgumentOutOfRangeException(nameof(framebufferWidth));
         if(_width==framebufferWidth&&_height==framebufferHeight)return;
+        FlushFrameCommands();
         _backbuffer?.Dispose();_backbuffer?.Color?.Dispose();_backbuffer=null;
         _width=framebufferWidth;_height=framebufferHeight;_viewport=new(0,0,_width,_height,0,1);
         if(_layer!=0)DrawableSize(_layer,_width,_height);
     }
     public void AttachPresentSurface(int width,int height){CheckAlive();Resize(width,height);}
-    public void BeginFrame(){CheckAlive();if(_frameOpen)throw new InvalidOperationException("A Metal frame is already open.");_framePool=New("NSAutoreleasePool");_frameOpen=true;}
-    public void EndFrame(){CheckAlive();if(!_frameOpen)return;Release(_framePool);_framePool=0;_frameOpen=false;}
+    public void BeginFrame()
+    {
+        CheckAlive();
+        if(_frameOpen)throw new InvalidOperationException("A Metal frame is already open.");
+        _framePool=New("NSAutoreleasePool");_frameOpen=true;
+        FrameSubmissions = FrameDraws = FramePasses = 0;
+        FrameWaitMilliseconds = 0;
+        FrameUploadBytes = 0;
+    }
+    public void EndFrame()
+    {
+        CheckAlive();
+        if(!_frameOpen)return;
+        try { FlushFrameCommands(); }
+        finally { Release(_framePool);_framePool=0;_frameOpen=false; }
+    }
     public void SetPresentSource(IRenderTexture? texture)=>_presentSource=texture==null?null:Resource<MetalTexture>(texture);
     public void BindFramebuffer(IRenderFramebuffer? framebuffer){CheckAlive();_draw=_read=framebuffer==null?null:Framebuffer(framebuffer);}
     public void RestoreFramebufferBindings(IRenderFramebuffer? draw,IRenderFramebuffer? read){CheckAlive();_draw=draw==null?null:Framebuffer(draw);_read=read==null?null:Framebuffer(read);}
@@ -111,7 +126,7 @@ public sealed unsafe partial class MetalRenderBackend : IRenderBackend
     public bool TryGetError(out string message){message=string.Empty;return false;}
     public void Dispose()
     {
-        if(_disposed)return;_disposed=true;
+        if(_disposed)return;EndFrame();_disposed=true;
         if(_framePool!=0){Release(_framePool);_framePool=0;}_frameOpen=false;
         _backbuffer?.Dispose();
         foreach(var r in _resources.ToArray())r.Dispose();
