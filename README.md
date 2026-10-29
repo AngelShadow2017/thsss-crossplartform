@@ -8,7 +8,7 @@
 sh tools/run-game.sh
 ```
 
-需要 .NET 8 SDK 和系统 OpenGL / OpenAL。启动脚本自动使用 `game/` 的资源、配置与存档；不必再手工设置工作目录。SDK版本统一由根目录 `global.json` 固定。
+需要 .NET 10 SDK；macOS 默认使用系统 Metal / AudioToolbox，Windows 使用 OpenGL / XAudio2，Linux 使用 OpenGL / OpenAL。启动脚本自动使用 `game/` 的资源、配置与存档；不必再手工设置工作目录。SDK版本统一由根目录 `global.json` 配置，允许已安装的 .NET 10 后续 SDK feature band。
 
 ## 配置
 
@@ -30,6 +30,23 @@ sh tools/run-config.sh
 
 ## 构建与发布
 
+M 系列 Mac 在首次准备好 .NET 10 SDK、Git LFS 资源和着色器工具后，从仓库根运行一个命令：
+
+```sh
+# 首次准备；已拉取 LFS 资源时不必重复
+git lfs install
+git lfs pull
+brew install glslang spirv-cross
+
+sh tools/package-macos.command
+```
+
+输出为 `dist/thsss-日期-时间/` 和同名 `.tar.gz`，包含 ARM64 游戏、Config、.NET 10 运行时、资源和 Metal 着色器。解压后双击 `run-game.command` 或 `run-config.command`。测试机无需另装 .NET、Homebrew 或着色器工具。此处是可携带的目录包，不是经过 Apple 公证的安装器；详细入口与验证边界见 [macOS 文档](docs/MACOS_2026.md)。
+
+未拉取的 LFS 指针会让打包在构建前终止，并列出缺失资源示例。打包脚本不会自动下载资源。
+
+其他平台的普通构建/发布入口：
+
 ```sh
 dotnet build src/THSSS.csproj
 dotnet build src/Config/THSSS.Config.csproj
@@ -37,7 +54,7 @@ dotnet publish src/THSSS.csproj -c Release -o artifacts/publish
 dotnet publish src/Config/THSSS.Config.csproj -c Release -o artifacts/publish
 ```
 
-发布版会附带只读资源和初始配置，运行后在自己的目录创建存档/录像；**不会把 `game/Score.dat` 或你的录像打进发布包**。已有玩家数据只需保留在 `game/`，不要拿测试数据覆盖。
+发布版会附带只读资源和 `game/Setting.INI` 中的当前配置，运行后在自己的目录创建存档/录像；**不会把 `game/Score.dat` 或你的录像打进发布包**。已有玩家数据只需保留在 `game/`，不要拿测试数据覆盖。
 
 ## 验证
 

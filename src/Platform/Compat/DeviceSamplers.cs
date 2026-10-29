@@ -12,6 +12,7 @@ public partial class Device
     private void StoreSamplerState(int sampler, SamplerState state, int value)
     {
         if (sampler < 0 || sampler > 15) throw new ArgumentOutOfRangeException(nameof(sampler));
+        FlushActiveSpriteBatch();
         _samplerStates[(sampler,state)] = value;
     }
     internal void ApplySamplerState()

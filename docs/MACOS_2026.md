@@ -1,4 +1,4 @@
-# macOS（2026-10-28）
+# macOS（2026-10-29）
 
 ## 运行方式
 
@@ -23,16 +23,32 @@ Intel 对应 `osx-x64`，Apple Silicon 对应 `osx-arm64`。Metal 需要系统�
 
 ## 发布与着色器
 
-构建机需要 `dotnet`、`glslangValidator`、`spirv-cross`。将MSL预先导出到发布目录，用户运行时无需这些转换工具：
+M 系列 Mac 的目标 RID 为 `osx-arm64`。构建机需要 .NET 10 SDK、Perl（macOS 系统提供）、完整 Git LFS 资源，以及 `glslangValidator`、`spirv-cross`。一次准备后用单一入口打包：
 
 ```sh
-dotnet publish src/THSSS.csproj -r osx-arm64 --self-contained true -o dist/mac-arm64
-sh tools/export-metal-shaders.sh dist/mac-arm64
+git lfs install
+git lfs pull
+brew install glslang spirv-cross
+sh tools/package-macos.command
 ```
+
+产物为 `dist/thsss-YYYYMMDD-HHMMSS/` 和同名 `.tar.gz`，包含游戏、Config、.NET 10 ARM64 运行时、只读资源、当前 `Setting.INI` 和 `MetalShaders/`。解压后双击 `run-game.command` / `run-config.command`，也可用 `sh run-game.sh` / `sh run-config.sh`。接收测试包的 Mac 无需安装 SDK、运行时或转换工具。打包不启动游戏；缺少工具或 LFS 内容时会明确失败，不把指针文件装进包里。
+
+打包入口调用 `tools/make-dist.pl --rid osx-arm64 --self-contained`，可追加 `--out dist/自定义名称`；默认每次使用新的时间戳目录，避免混入旧的运行产物。`--clean` 仅允许删除仓库 `dist/` 下已解析真实路径的子目录。已有 `Score.dat`、Replay 或 ScreenShot 内容会让复用发布目录失败。
 
 `MetalShaders/*.msl` 文件名由源代码及阶段哈希组成，避免误用过期缓存。运行时先查发布目录缓存，开发环境缺少缓存才调用转换工具；二者皆不可用时给出明确错误。缓存包含实际游戏着色器，Metal窗口呈现的小型MSL随程序内置。
 
-配置程序为独立Avalonia工程，按相同RID发布。正式分发应使用 `tools/make-dist.pl`，保留其不复制玩家Score/Replay/ScreenShot的约束。
+生产导出工具为 `tools/MetalShaderExporter/MetalShaderExporter.csproj`，直接读取游戏实际使用的 Sprite、3D 和 FX 着色器源，不解析 C# 文本或运行测试程序集。导出器按构建机 RID 运行，游戏和 Config 按发布 RID 构建。单独导出仍可运行 `sh tools/export-metal-shaders.sh 发布目录`。
+
+配置程序为独立 Avalonia 工程，按相同 RID 发布。“应用并启动”显式传递正在编辑的数据根，避免配置与游戏使用不同的存档目录。包不会复制开发目录里的 Score/Replay/ScreenShot。
+
+## 精灵提交顺序
+
+`Sprite.Transform` 在每次 `Draw` 写入顶点时生效，保留四维齐次坐标；提交时给普通和 FX 着色器的变换均为恒等矩阵，避免重复变换。同一纹理的不同旋转/缩放可以在一批中提交，纹理比较使用 Texture 对象，不依赖每次可能重新分配的原生句柄包装。
+
+混合/深度状态、目标/深度附件、Clear、3D 绘制、FX 开始/结束及参数变化之前提交待绘批次，保持原先的绘制顺序。文字显式 `Flush` 后才允许更新或释放字形纹理，不再依赖 Transform 自赋值的副作用。Sprite uniform 缓冲复用，普通提交不再创建三个临时数组。
+
+本次仅在 Windows 静态分析和修改，未构建、未打包、未运行测试或游戏，未拉取 LFS 资源。上述改动尚需 M 系列 Mac 验证启动、关卡绘制、暂停 FX、声音和帧率，不能把以前的报告或软件驱动结果当成本次实机证据。Metal 后端原有的每次绘制同步等待仍保留，尚未测量这次优化后的实际性能。
 
 ## 自动验证
 

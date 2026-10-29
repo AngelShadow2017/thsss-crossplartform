@@ -12,7 +12,7 @@
 
 ## 编译边界
 
-`THSSS_WINDOWS`/`THSSS_MACOS`根据目标RID定义：显式RuntimeIdentifier优先，未指定时使用NETCoreSdkRuntimeIdentifier。跨OS发行必须指定RID；普通net8.0加win-x64不会自动定义SDK的WINDOWS常量。
+`THSSS_WINDOWS`/`THSSS_MACOS`根据目标RID定义：显式RuntimeIdentifier优先，未指定时使用NETCoreSdkRuntimeIdentifier。跨OS发行必须指定RID；普通net10.0加win-x64不会自动定义SDK的WINDOWS常量。
 
 Windows产物包含XAudio2、ole32与Win32窗口导入；macOS产物包含CoreAudio和Cocoa导入。Linux不包含这些原生音频类型。OpenAL仍是可选后端，不能把类型剔除当作所有非默认依赖均已删除。
 

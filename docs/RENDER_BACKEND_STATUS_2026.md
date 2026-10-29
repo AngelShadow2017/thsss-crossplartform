@@ -17,6 +17,8 @@ OpenGL由窗口层持有上下文并交换缓冲。Vulkan与Metal使用无GL上�
 
 Vulkan使用1.3特性，帧内批量录制并快照顶点/uniform数据，fence完成后回收描述符和上传内存。资源销毁、读回或更新需要时允许flush；不能把“一帧一提交”视为所有场景不变的约束。静态文字仅缓存每个字体最近一份字形纹理，避免无限增长。
 
+Sprite 在 Draw 时将当前变换写入齐次顶点，同纹理的旋转/缩放不再各自强制提交；原生句柄包装对象的引用不参与合批判断。Device/FX 在改变绘制状态和目标前提交待绘顶点，文字使用显式 Flush 保证缓存纹理生命周期。2026-10-29 的这组改动仅静态审查，尚未重新构建或取得设备性能数据，详见 macOS 文档。
+
 Metal直接调用系统框架，不经MoltenVK；MSL由同一份GLSL转译。发布包预存MSL后不需要运行时转换工具；开发环境可用glslangValidator与spirv-cross。Vulkan当前仍需要glslangValidator运行时转换，不能把Metal缓存描述套用到Vulkan。
 
 ## 状态与资源

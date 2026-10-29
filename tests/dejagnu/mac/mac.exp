@@ -15,6 +15,6 @@ proc mac_contract {name command marker} {
 if {![info exists env(THSSS_TEST_ROOT)] || ![info exists env(THSSS_MAC_CONTRACT_DIR)]} {error "Use tools/run-mac-regressions.sh to build API drivers."}
 set root $env(THSSS_TEST_ROOT)
 set output $env(THSSS_MAC_CONTRACT_DIR)
-mac_contract "AudioQueue native ABI and queue software contract" [list dotnet [file join $root tests CoreAudioCompatibility bin Debug net8.0 CoreAudioCompatibility.dll] [file join $output libaudioqueue.so]] {PASS CoreAudioCompatibility:}
-mac_contract "Metal native selectors, command recording and resource software contract" [list dotnet [file join $root tests MetalApiCompatibility bin Debug net8.0 MetalApiCompatibility.dll]] {PASS: [0-9]+ assertions; actual Metal backend P/Invoke}
-mac_contract "Real GLSL SPIR-V MSL translation" [list dotnet [file join $root tests MetalCompatibility bin Debug net8.0 MetalCompatibility.dll]] {PASS MetalCompatibility:}
+mac_contract "AudioQueue native ABI and queue software contract" [list dotnet [file join $root tests CoreAudioCompatibility bin Debug net10.0 CoreAudioCompatibility.dll] [file join $output libaudioqueue.so]] {PASS CoreAudioCompatibility:}
+mac_contract "Metal native selectors, command recording and resource software contract" [list dotnet [file join $root tests MetalApiCompatibility bin Debug net10.0 MetalApiCompatibility.dll]] {PASS: [0-9]+ assertions; actual Metal backend P/Invoke}
+mac_contract "Real GLSL SPIR-V MSL translation" [list dotnet [file join $root tests MetalCompatibility bin Debug net10.0 MetalCompatibility.dll]] {PASS MetalCompatibility:}
